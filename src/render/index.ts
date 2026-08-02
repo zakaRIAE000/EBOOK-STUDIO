@@ -5,6 +5,38 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Inlines local font url()s (relative to `baseDir`) as base64 data URIs.
+ * base.css keeps ordinary relative @font-face paths (portable, valid CSS on
+ * its own); this is what lets renderToPdf load that CSS via page.setContent
+ * with no base URL and still have Chromium find + embed the fonts (needed
+ * for the fonts-embedded QC gate) rather than silently failing to resolve
+ * relative paths against about:blank.
+ */
+const FONT_URL_RE = /url\((["']?)((?:(?!\1)[^)])+\.(?:ttf|otf|woff2?))\1\)/gi;
+
+function fontMimeType(ext: string): string {
+  if (ext === "otf") return "font/otf";
+  if (ext === "woff2") return "font/woff2";
+  if (ext === "woff") return "font/woff";
+  return "font/ttf";
+}
+
+export async function inlineLocalFontUrls(css: string, baseDir: string): Promise<string> {
+  let result = css;
+  for (const match of css.matchAll(FONT_URL_RE)) {
+    const [full, quote, rawUrl] = match;
+    if (/^(https?:)?\/\//.test(rawUrl) || rawUrl.startsWith("data:")) continue;
+    const absPath = path.resolve(baseDir, rawUrl);
+    const buffer = await readFile(absPath);
+    const mime = fontMimeType(path.extname(absPath).slice(1).toLowerCase());
+    const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+    const q = quote || '"';
+    result = result.replace(full, `url(${q}${dataUrl}${q})`);
+  }
+  return result;
+}
+
 /** Loaded once and cached: the paged.js browser polyfill, inlined into every rendered document. */
 let pagedPolyfillPromise: Promise<string> | undefined;
 function loadPagedPolyfill(): Promise<string> {

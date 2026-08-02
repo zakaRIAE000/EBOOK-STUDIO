@@ -1,0 +1,765 @@
+/* ============================================================
+   Ebook Studio — base.css
+   The visual engine: "real premium US book". Consumes ONLY
+   var(--*) tokens from tokens.css (R7 — zero hardcoded colors
+   or fonts below). Paginated by Paged.js, printed by Playwright.
+   ============================================================ */
+
+/* ---------------------------------------------------------
+   1. Fonts — OFL variable fonts vendored in assets/fonts/ (R10).
+   Paths are relative to this file (templates/base.css ->
+   ../assets/fonts/...). The render pipeline inlines these as
+   base64 data URIs before handing the document to Chromium, so
+   the relative path only has to resolve on disk, never in-browser.
+   --------------------------------------------------------- */
+@font-face {
+  font-family: "Literata";
+  src: url("../assets/fonts/literata/Literata[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("../assets/fonts/literata/Literata-Italic[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter[opsz,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter-Italic[opsz,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono[wght].ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-Italic[wght].ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------
+   2. Page geometry — @page 6x9in, binding-aware margins,
+   discreet running header + folio via GCPM margin boxes.
+   Reasoning on the two margin values not spelled out by the
+   brief: top mirrors --margin-outer (0.75in), bottom mirrors
+   --margin-inner (0.9in) so the extra room consistently sits on
+   the "heavier" side of the page (gutter + footer).
+   --------------------------------------------------------- */
+@page {
+  /* Paged.js reads `size` with its own lightweight parser ahead of normal
+     CSS cascade, before var() would resolve — it silently fell back to
+     its Letter-size default here until this was made literal. Every
+     other page-box property below resolves var() fine (proven by
+     getComputedStyle during development); this is the one exception. */
+  size: 6in 9in;
+  margin-top: var(--margin-top);
+  margin-bottom: var(--margin-bottom);
+}
+
+@page :right {
+  margin-left: var(--margin-inner);
+  margin-right: var(--margin-outer);
+
+  @top-right {
+    content: string(chapter-title);
+    font-family: var(--font-heading);
+    font-size: var(--font-size-meta);
+    letter-spacing: var(--letter-spacing-heading);
+    text-transform: uppercase;
+    color: var(--color-running-header);
+  }
+  @bottom-right {
+    content: counter(page);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-meta);
+    color: var(--color-folio);
+  }
+}
+
+@page :left {
+  margin-left: var(--margin-outer);
+  margin-right: var(--margin-inner);
+
+  @top-left {
+    content: string(book-title);
+    font-family: var(--font-heading);
+    font-size: var(--font-size-meta);
+    letter-spacing: var(--letter-spacing-heading);
+    text-transform: uppercase;
+    color: var(--color-running-header);
+  }
+  @bottom-left {
+    content: counter(page);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-meta);
+    color: var(--color-folio);
+  }
+}
+
+/* No running header/folio on the very first printed page. */
+@page :first {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+/* Chapter opener pages: keep the folio, drop the running header
+   (a book never repeats the chapter title on the page that
+   already announces it in giant type). */
+@page chapter-open {
+  @top-left { content: none; }
+  @top-right { content: none; }
+}
+
+/* Back cover: no folio/running header — nothing but the cover. */
+@page back-cover {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+/* Source string for the running header book title: a
+   zero-footprint element placed once at the top of <body>,
+   see chapter.html / the frontmatter templates. */
+.doc-title-marker {
+  string-set: book-title content(text);
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------
+   3. Base typography
+   --------------------------------------------------------- */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 12pt;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+p {
+  margin: 0;
+  text-align: justify;
+  text-indent: 1.2em;
+}
+
+/* First paragraph after any heading or component never indents —
+   the classic book rule (indentation signals "new paragraph",
+   the first one after a break doesn't need the signal). */
+h1 + p,
+h2 + p,
+h3 + p,
+.chapter-open .body-content > p:first-child {
+  text-indent: 0;
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+strong { font-weight: var(--weight-body-bold); }
+
+/* ---------------------------------------------------------
+   4. Headings
+   --------------------------------------------------------- */
+h1, h2, h3 {
+  font-family: var(--font-heading);
+  color: var(--color-heading);
+  letter-spacing: var(--letter-spacing-heading);
+  break-after: avoid;
+  text-wrap: balance;
+}
+
+h1.chapter-title {
+  /* The page break itself lives on .chapter-open below: the
+     number + thin rule that visually precede this h1 are part of
+     the same opening spread and must land on the new page with
+     it, not get orphaned at the bottom of the previous page. */
+  font-size: var(--font-size-h1);
+  font-weight: var(--weight-heading);
+  margin: 0 0 var(--space-lg);
+  string-set: chapter-title content(text);
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--weight-heading);
+  margin: var(--space-xl) 0 var(--space-md);
+}
+
+h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--weight-heading-light);
+  margin: var(--space-lg) 0 var(--space-sm);
+}
+
+/* ---------------------------------------------------------
+   5. Chapter opener — oversized number, thin rule, whitespace,
+   then a drop cap on the first paragraph of body copy.
+   --------------------------------------------------------- */
+.chapter-open {
+  break-before: page;
+  page: chapter-open;
+  padding-top: 12%;
+}
+
+.chapter-number {
+  font-family: var(--font-heading);
+  font-size: 4.4em;
+  font-weight: var(--weight-heading-light);
+  line-height: 1;
+  color: var(--color-chapter-number);
+  margin: 0;
+}
+
+.chapter-rule {
+  width: 3em;
+  height: 0;
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: var(--space-md) 0 var(--space-lg);
+}
+
+.chapter-open .body-content > p:first-child::first-letter {
+  float: left;
+  font-family: var(--dropcap-font);
+  font-size: var(--dropcap-size);
+  font-weight: var(--weight-heading);
+  line-height: 0.82;
+  color: var(--dropcap-color);
+  padding-right: 0.08em;
+  padding-top: 0.02em;
+}
+
+/* ---------------------------------------------------------
+   6. Break control — never split a visual unit across pages.
+   --------------------------------------------------------- */
+figure,
+table,
+.callout,
+.card,
+.pull-quote,
+.key-takeaways,
+.process-steps,
+.checklist {
+  break-inside: avoid;
+}
+
+/* ---------------------------------------------------------
+   7. Components
+   --------------------------------------------------------- */
+
+/* -- Process steps -- */
+.process-steps {
+  list-style: none;
+  margin: var(--space-lg) 0;
+  padding: 0;
+  counter-reset: process-step;
+}
+.process-step {
+  counter-increment: process-step;
+  display: grid;
+  grid-template-columns: 2.2em 1fr;
+  gap: 0 var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.process-step-number {
+  grid-row: 1 / 3;
+  width: 1.8em;
+  height: 1.8em;
+  border-radius: 50%;
+  background: var(--color-process-step-number-bg);
+  color: var(--color-process-step-number-text);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-caption);
+  font-weight: var(--weight-heading);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.process-step-number::before {
+  content: counter(process-step);
+}
+.process-step-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: var(--font-size-body);
+  color: var(--color-heading);
+}
+.process-step-body {
+  grid-column: 2;
+  margin: 0.15em 0 0;
+  text-indent: 0;
+  text-align: left;
+}
+
+/* -- Checklist -- */
+.checklist {
+  list-style: none;
+  margin: var(--space-lg) 0;
+  padding: 0;
+}
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.checklist-box {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+  margin-top: 0.2em;
+  border: 1.5px solid var(--color-checklist-box-border);
+  border-radius: var(--radius-sm);
+}
+.checklist-item p {
+  margin: 0;
+  text-indent: 0;
+  text-align: left;
+}
+
+/* -- Comparison table -- */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-lg) 0;
+  font-size: var(--font-size-caption);
+}
+.comparison-table caption {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-body);
+  font-weight: var(--weight-heading);
+  text-align: left;
+  margin-bottom: var(--space-sm);
+  caption-side: top;
+}
+.comparison-table th,
+.comparison-table td {
+  border: 1px solid var(--color-table-border);
+  padding: 0.5em 0.7em;
+  text-align: left;
+}
+.comparison-table thead th {
+  background: var(--color-table-header-bg);
+  color: var(--color-table-header-text);
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+}
+.comparison-table tbody tr:nth-child(even) {
+  background: var(--color-table-row-alt-bg);
+}
+
+/* -- Calculation card -- */
+.calculation-card {
+  background: var(--color-calculation-bg);
+  border: 1px solid var(--color-calculation-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md) var(--space-lg);
+  margin: var(--space-lg) 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+}
+.calculation-card .calculation-label {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-heading);
+}
+.calculation-card .calculation-formula {
+  font-size: 1.1em;
+  margin-top: var(--space-xs);
+}
+
+/* -- Callouts (warning / tip) -- */
+.callout {
+  border-left: 3px solid;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-lg) 0;
+}
+.callout p {
+  margin: 0;
+  text-indent: 0;
+  text-align: left;
+  font-size: var(--font-size-caption);
+}
+.callout-label {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--letter-spacing-heading);
+  text-transform: uppercase;
+  margin-bottom: var(--space-xs);
+}
+.callout--warning {
+  background: var(--color-callout-warning-bg);
+  border-color: var(--color-callout-warning-border);
+  color: var(--color-callout-warning-text);
+}
+.callout--tip {
+  background: var(--color-callout-tip-bg);
+  border-color: var(--color-callout-tip-border);
+  color: var(--color-callout-tip-text);
+}
+
+/* -- Key takeaways -- */
+.key-takeaways {
+  background: var(--color-key-takeaways-bg);
+  border-top: 2px solid var(--color-key-takeaways-border);
+  border-bottom: 2px solid var(--color-key-takeaways-border);
+  padding: var(--space-md) var(--space-lg);
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+.key-takeaways-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--letter-spacing-heading);
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin: 0 0 var(--space-sm);
+}
+.key-takeaways ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.key-takeaways li {
+  margin-bottom: var(--space-xs);
+}
+
+/* -- Pull quote -- */
+.pull-quote {
+  margin: var(--space-xl) var(--space-md);
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--color-pull-quote-rule);
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading-light);
+  font-size: 1.3em;
+  line-height: 1.35;
+  color: var(--color-pull-quote-text);
+}
+.pull-quote p {
+  margin: 0;
+  text-indent: 0;
+  text-align: left;
+}
+.pull-quote cite {
+  display: block;
+  margin-top: var(--space-sm);
+  font-family: var(--font-body);
+  font-style: normal;
+  font-weight: var(--weight-body);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
+
+/* -- Figure (infographic / illustration frame) -- */
+figure.figure {
+  margin: var(--space-lg) 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-figure-border);
+}
+figure.figure img,
+figure.figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+figure.figure figcaption {
+  margin-top: var(--space-sm);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-caption);
+  color: var(--color-figure-caption);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------
+   8. Table of contents — page numbers resolved natively by
+   Paged.js via target-counter() against each chapter's id
+   (no double-render hack: single pass, Paged.js reads the
+   final page tree it just built).
+   --------------------------------------------------------- */
+.toc-list {
+  list-style: none;
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+}
+.toc-entry {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.toc-entry a {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+}
+.toc-leader {
+  flex: 1;
+  overflow: hidden;
+}
+.toc-leader::after {
+  content: leader(dotted);
+  color: var(--color-rule);
+}
+.toc-pagenum::after {
+  content: target-counter(attr(data-target), page);
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------
+   9. Front matter / back matter pages
+   --------------------------------------------------------- */
+/* .title-page deliberately excluded: it is always the very first thing in
+   the document, and forcing break-before on it (with the .doc-title-marker
+   sibling immediately before it) pushed a spurious blank page in front of
+   it — Paged.js counted the marker as occupying page 1 and honored the
+   break by starting the title page on page 2 instead. */
+.copyright-page,
+.bonus-teaser,
+.toc-page,
+.cta-page {
+  break-before: page;
+}
+
+.title-page {
+  padding-top: 34%;
+  text-align: center;
+}
+.title-page-kicker {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-meta);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin: 0 0 var(--space-lg);
+}
+.title-page-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: 2.6em;
+  line-height: 1.1;
+  color: var(--color-heading);
+  margin: 0 auto;
+  max-width: 80%;
+}
+.title-page-subtitle {
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 1.15em;
+  color: var(--color-text-muted);
+  margin: var(--space-md) auto 0;
+  max-width: 70%;
+  text-indent: 0;
+  text-align: center;
+}
+.title-page-rule {
+  width: 2.5em;
+  height: 0;
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: var(--space-xl) auto;
+}
+.title-page-author {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-body);
+  letter-spacing: var(--letter-spacing-heading);
+  color: var(--color-secondary);
+  margin: 0;
+}
+
+.copyright-page {
+  padding-top: 60%;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
+.copyright-page p {
+  text-indent: 0;
+  margin-bottom: var(--space-sm);
+}
+.disclaimer-block {
+  margin-top: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-meta);
+}
+
+.toc-page-title,
+.bonus-teaser-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: var(--font-size-h1);
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.bonus-teaser {
+  padding-top: 15%;
+}
+.bonus-teaser-intro {
+  color: var(--color-text-muted);
+  text-indent: 0;
+  margin: var(--space-sm) 0 var(--space-xl);
+}
+.bonus-teaser-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bonus-teaser-item {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-md) 0;
+}
+.bonus-teaser-item:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+.bonus-teaser-item-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  color: var(--color-heading);
+  margin: 0 0 var(--space-xs);
+}
+.bonus-teaser-item p {
+  margin: 0;
+  text-indent: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.cta-page {
+  padding-top: 25%;
+  text-align: center;
+}
+.cta-title {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: 1.8em;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-md);
+}
+.cta-body {
+  text-indent: 0;
+  text-align: center;
+  color: var(--color-text-muted);
+  max-width: 80%;
+  margin: 0 auto var(--space-lg);
+}
+.cta-button {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  letter-spacing: var(--letter-spacing-heading);
+  text-transform: uppercase;
+  font-size: var(--font-size-caption);
+  color: var(--color-bg);
+  background: var(--color-accent);
+  padding: 0.8em 1.6em;
+  border-radius: var(--radius-sm);
+}
+
+.back-cover {
+  break-before: page;
+  page: back-cover;
+  /* Fills the content area exactly (a fixed calc() length, not a
+     percentage — the earlier height:100% attempt collapsed unpredictably
+     under Paged.js's pagination pass, see the .title-page fix above for
+     the same lesson). True edge-to-edge bleed past the print margins was
+     tried via negative margins + explicit page-sized dimensions and
+     produced inconsistent, unexplainable box sizes under Paged.js's
+     fragmentation engine (getComputedStyle reported the right size,
+     getBoundingClientRect did not) — not worth the fragility for an
+     interior PDF page. The physical outside cover is generated
+     separately by /cover; this page only needs to read as one on screen. */
+  min-height: calc(var(--page-height) - var(--margin-top) - var(--margin-bottom));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  padding: var(--space-xl) var(--space-lg);
+}
+.back-cover-punchline {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading);
+  font-size: 1.6em;
+  line-height: 1.25;
+  margin: 0 0 var(--space-lg);
+  text-indent: 0;
+}
+.back-cover-bullets {
+  list-style: none;
+  margin: 0 0 var(--space-xl);
+  padding: 0;
+}
+.back-cover-bullets li {
+  padding-left: 1.3em;
+  position: relative;
+  margin-bottom: var(--space-sm);
+}
+.back-cover-bullets li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--color-accent);
+}
+.back-cover-brand {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-meta);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------
+   10. Utility
+   --------------------------------------------------------- */
+.text-center { text-align: center; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

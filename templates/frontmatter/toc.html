@@ -1,0 +1,23 @@
+<!--
+  Table of contents. {{TOC_ENTRIES}} is a run of .toc-entry rows,
+  one per chapter/bonus, e.g.:
+
+    <li class="toc-entry">
+      <a href="#ch-01">01. Cold Outreach Basics</a>
+      <span class="toc-leader"></span>
+      <span class="toc-pagenum" data-target="#ch-01"></span>
+    </li>
+
+  The id in href/data-target must match the id on that chapter's
+  .chapter-open (or bonus/backmatter) wrapper element exactly.
+  Page numbers are resolved natively by Paged.js via
+  target-counter(attr(data-target), page) in base.css — no
+  second render pass, no manually-typed page numbers (R8: the
+  number is only ever true because Paged.js computed it).
+-->
+<section class="toc-page">
+  <h1 class="toc-page-title">Contents</h1>
+  <ul class="toc-list">
+    {{TOC_ENTRIES}}
+  </ul>
+</section>

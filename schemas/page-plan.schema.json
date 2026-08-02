@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ebook-studio/schemas/page-plan.schema.json",
+  "title": "PagePlan",
+  "description": "Deterministic block segmentation + component assignment written by studio:plan to design/page-plan.json. Consumed by the layout-designer agent, which applies it rather than re-deciding layout by eye.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "generatedAt", "chapters"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "project": { "type": "string" },
+    "generatedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "chapters": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/chapterPlan" }
+    }
+  },
+  "definitions": {
+    "chapterPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chapterId", "blocks", "componentCounts", "editorialBodyRatio",
+        "estimatedPages", "minNonBodyComponents", "actualNonBodyComponents", "warnings"
+      ],
+      "properties": {
+        "chapterId": { "type": "string" },
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/planBlock" }
+        },
+        "componentCounts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "editorialBodyRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "estimatedPages": { "type": "number", "minimum": 0 },
+        "minNonBodyComponents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Budget: >=1 non-body component per 4 estimated pages."
+        },
+        "actualNonBodyComponents": { "type": "integer", "minimum": 0 },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "planBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "component", "sourceKind", "rule", "preview"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "component": {
+          "type": "string",
+          "enum": [
+            "editorial-body", "process-steps", "checklist", "comparison-table",
+            "calculation-card", "warning-callout", "tip-callout", "key-takeaways", "pull-quote"
+          ]
+        },
+        "sourceKind": {
+          "type": "string",
+          "enum": ["heading", "paragraph", "list", "table", "blockquote"]
+        },
+        "rule": {
+          "type": "string",
+          "description": "Which deterministic rule matched (or 'ambiguous-leftover' / 'chapter-final-summary')."
+        },
+        "preview": {
+          "type": "string",
+          "description": "First ~80 chars of the source block, verbatim (R2/R3 — never invented)."
+        }
+      }
+    }
+  }
+}

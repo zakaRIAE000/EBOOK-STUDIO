@@ -1,0 +1,18 @@
+<!--
+  Placeholders: {{BOOK_TITLE}} {{AUTHOR_NAME}} {{COPYRIGHT_YEAR}}
+  {{PUBLISHER_NAME}} {{NICHE_DISCLAIMER}}
+  The .disclaimer-block is CONDITIONAL: required whenever the
+  project's resolved config sets disclaimer.required = true
+  (finance/trading/health niches — see src/design), optional
+  otherwise. Drop the whole <div class="disclaimer-block"> if
+  {{NICHE_DISCLAIMER}} is empty and not required.
+-->
+<section class="copyright-page">
+  <p>Copyright &copy; {{COPYRIGHT_YEAR}} {{AUTHOR_NAME}}. All rights reserved.</p>
+  <p>No part of this publication may be reproduced, distributed, or transmitted in any form or by any means, including photocopying, recording, or other electronic or mechanical methods, without the prior written permission of the publisher, except in the case of brief quotations embodied in critical reviews and certain other noncommercial uses permitted by copyright law.</p>
+  <p>{{PUBLISHER_NAME}}</p>
+  <p>Published in the United States of America.</p>
+  <div class="disclaimer-block">
+    {{NICHE_DISCLAIMER}}
+  </div>
+</section>

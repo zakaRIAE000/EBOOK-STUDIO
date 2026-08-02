@@ -3,15 +3,32 @@ import { Command } from "commander";
 import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { ingestProject, IngestError } from "../ingest/index.js";
-import { renderToPdf } from "../render/index.js";
+import { designProject, DesignError } from "../design/index.js";
+import { planProject, PlanError } from "../plan/index.js";
+import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
 
 class NotImplementedError extends Error {}
 class ProjectNotFoundError extends Error {}
 
-const PROJECTS_ROOT = path.resolve(process.cwd(), "workspace/projects");
+const REPO_ROOT = process.cwd();
+const PROJECTS_ROOT = path.resolve(REPO_ROOT, "workspace/projects");
 
 function projectRootFor(slug: string): string {
   return path.join(PROJECTS_ROOT, slug);
+}
+
+/** Resolves a --css/--html path against the project root first, falling back
+ * to the repo root — lets prototype/build load shared templates/ and
+ * themes/ files (outside any project) with the same clean relative syntax
+ * as project-local files. */
+async function resolveProjectOrRepoPath(projectRoot: string, relativePath: string): Promise<string> {
+  const projectRelative = path.join(projectRoot, relativePath);
+  try {
+    await stat(projectRelative);
+    return projectRelative;
+  } catch {
+    return path.join(REPO_ROOT, relativePath);
+  }
 }
 
 async function assertProjectExists(slug: string): Promise<string> {
@@ -158,7 +175,11 @@ program
     process.exitCode = await runStage(opts.project, "prototype", async (projectRoot) => {
       const bodyHtml = await readFile(path.join(projectRoot, opts.html), "utf-8");
       const css = await Promise.all(
-        (opts.css ?? []).map((cssPath) => readFile(path.join(projectRoot, cssPath), "utf-8")),
+        (opts.css ?? []).map(async (cssPath) => {
+          const resolved = await resolveProjectOrRepoPath(projectRoot, cssPath);
+          const text = await readFile(resolved, "utf-8");
+          return inlineLocalFontUrls(text, path.dirname(resolved));
+        }),
       );
       const outputPdfPath = path.join(projectRoot, opts.out);
       const previewsDir = opts.previews ? path.join(projectRoot, "previews") : undefined;
@@ -170,7 +191,31 @@ program
     });
   });
 
-for (const stage of ["audit", "plan", "design", "build", "qc"] as const) {
+program
+  .command("design")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .action(async (opts: { project: string }) => {
+    process.exitCode = await runStage(opts.project, "design", async () => {
+      const result = await designProject({ projectSlug: opts.project, repoRoot: REPO_ROOT });
+      const summary = `Resolved config for "${opts.project}" (theme ${result.config.theme.name}) → ${result.resolvedPath}. Wrote ${result.tokensCssPath}`;
+      return { message: summary, details: result.config };
+    });
+  });
+
+program
+  .command("plan")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .action(async (opts: { project: string }) => {
+    process.exitCode = await runStage(opts.project, "plan", async () => {
+      const result = await planProject({ projectSlug: opts.project });
+      const chapterCount = result.pagePlan.chapters.length;
+      const blockCount = result.pagePlan.chapters.reduce((sum, c) => sum + c.blocks.length, 0);
+      const summary = `Planned ${chapterCount} chapter(s), ${blockCount} block(s) total. Wrote ${result.pagePlanPath} and ${result.coverageReportPath}`;
+      return { message: summary, details: result.pagePlan };
+    });
+  });
+
+for (const stage of ["audit", "build", "qc"] as const) {
   program
     .command(stage)
     .requiredOption("--project <slug>", "project slug under workspace/projects/")
@@ -190,8 +235,14 @@ program
         return { message: `Ingested ${result.inventory.chapters.length} chapter(s).`, details: result.inventory };
       }],
       ["audit", notImplementedStage("audit")],
-      ["plan", notImplementedStage("plan")],
-      ["design", notImplementedStage("design")],
+      ["design", async () => {
+        const result = await designProject({ projectSlug: opts.project, repoRoot: REPO_ROOT });
+        return { message: `Resolved config → ${result.resolvedPath}.`, details: result.config };
+      }],
+      ["plan", async () => {
+        const result = await planProject({ projectSlug: opts.project });
+        return { message: `Planned ${result.pagePlan.chapters.length} chapter(s) → ${result.pagePlanPath}.`, details: result.pagePlan };
+      }],
       ["build", notImplementedStage("build")],
       ["qc", notImplementedStage("qc")],
     ];
@@ -230,7 +281,7 @@ program
 try {
   await program.parseAsync(process.argv);
 } catch (err) {
-  if (err instanceof IngestError || err instanceof ProjectNotFoundError) {
+  if (err instanceof IngestError || err instanceof DesignError || err instanceof PlanError || err instanceof ProjectNotFoundError) {
     console.error(err.message);
     process.exitCode = 1;
   } else if ((err as { code?: string }).code?.startsWith("commander.")) {

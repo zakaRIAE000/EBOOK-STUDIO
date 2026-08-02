@@ -1,0 +1,29 @@
+# Ebook Studio — system defaults.
+# Bottom layer of the config merge: defaults -> theme preset ->
+# config/generated.yaml -> config/user.yaml -> config/resolved.yaml.
+# Values here apply to every project unless a later layer overrides them.
+
+schemaVersion: 1
+
+language: en-US
+
+format:
+  pageWidth: 6in
+  pageHeight: 9in
+  marginOuter: 0.75in
+  marginInner: 0.9in
+  marginTop: 0.75in
+  marginBottom: 0.9in
+
+theme: default
+
+# Niches where copyright.html's disclaimer block is mandatory (US market
+# regulatory norm for this kind of content). Matched case-insensitively as a
+# substring against brand-input.md's Niche field by src/design.
+disclaimerRequiredNiches:
+  - finance
+  - trading
+  - investing
+  - health
+  - wellness
+  - medical

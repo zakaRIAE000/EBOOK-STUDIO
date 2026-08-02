@@ -1,0 +1,119 @@
+/* ============================================================
+   Ebook Studio — token template (R7: zero hardcoded colors or
+   fonts anywhere else in templates/ — everything reads var(--*)
+   defined here).
+
+   src/design instantiates a project's design/tokens.css by
+   copying this file and rewriting the VALUE of specific
+   `--token: value;` lines below (comments, structure, and every
+   derived/aliased token are left untouched — they inherit
+   automatically through var()). Never hand-edit a project's
+   generated tokens.css: edit brand-input.md (or the theme) and
+   re-run `npm run studio:design -- --project <slug>`.
+
+   Primitive tokens (rewritten by src/design from resolved
+   config): the color-* and font-* entries in "Palette" and
+   "Type families" below. Everything else in this file is a
+   derived alias that rides along for free.
+   ============================================================ */
+
+:root {
+  /* ---- Page geometry (6x9in trade paperback) ---- */
+  --page-width: 6in;
+  --page-height: 9in;
+  --margin-outer: 0.75in;   /* outside edge: right on recto, left on verso */
+  --margin-inner: 0.9in;    /* spine/gutter side: left on recto, right on verso */
+  --margin-top: 0.75in;
+  --margin-bottom: 0.9in;   /* extra room for the folio */
+
+  /* ---- Type families (OFL, vendored in assets/fonts/ — R10) ---- */
+  --font-body: "Literata", Georgia, "Times New Roman", serif;
+  --font-heading: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+
+  /* ---- Type scale ---- */
+  --font-size-body: 11pt;
+  --line-height-body: 1.55;
+  --font-size-h1: 30pt;
+  --font-size-h2: 17pt;
+  --font-size-h3: 13pt;
+  --font-size-caption: 9pt;
+  --font-size-meta: 8.5pt;
+  --letter-spacing-heading: 0.02em;
+  --weight-body: 400;
+  --weight-body-bold: 600;
+  --weight-heading: 700;
+  --weight-heading-light: 500;
+
+  /* ---- Drop cap (first paragraph of every chapter opener) ---- */
+  --dropcap-size: 3.4em;
+  --dropcap-font: var(--font-heading);
+  --dropcap-color: var(--color-accent);
+
+  /* ---- Palette (primitives — instantiated from brand-input.md) ---- */
+  --color-bg: #fbfaf7;
+  --color-bg-alt: #f2efe7;
+  --color-text: #1c1a17;
+  --color-text-muted: #5a564e;
+  --color-heading: #14120f;
+  --color-primary: #14120f;
+  --color-secondary: #5a564e;
+  --color-accent: #9c7a2e;
+  --color-border: #d9d3c4;
+  --color-rule: #c9c2ae;
+  --color-link: #7a5c1e;
+
+  /* ---- Running header / folio ---- */
+  --color-running-header: #8a8477;
+  --color-folio: #8a8477;
+  --color-chapter-number: var(--color-accent);
+
+  /* ---- Callouts ---- */
+  --color-callout-warning-bg: #fbeee9;
+  --color-callout-warning-border: #c65a35;
+  --color-callout-warning-text: #6e2f18;
+  --color-callout-tip-bg: #eef3ea;
+  --color-callout-tip-border: #5c7a4a;
+  --color-callout-tip-text: #2f4325;
+
+  /* ---- Tables ---- */
+  --color-table-header-bg: var(--color-primary);
+  --color-table-header-text: var(--color-bg);
+  --color-table-row-alt-bg: var(--color-bg-alt);
+  --color-table-border: var(--color-border);
+
+  /* ---- Pull quote ---- */
+  --color-pull-quote-text: var(--color-heading);
+  --color-pull-quote-mark: var(--color-accent);
+  --color-pull-quote-rule: var(--color-accent);
+
+  /* ---- Key takeaways ---- */
+  --color-key-takeaways-bg: var(--color-bg-alt);
+  --color-key-takeaways-border: var(--color-accent);
+
+  /* ---- Process steps ---- */
+  --color-process-step-number-bg: var(--color-accent);
+  --color-process-step-number-text: var(--color-bg);
+
+  /* ---- Checklist ---- */
+  --color-checklist-box-border: var(--color-text-muted);
+  --color-checklist-box-check: var(--color-accent);
+
+  /* ---- Calculation card ---- */
+  --color-calculation-bg: var(--color-bg-alt);
+  --color-calculation-border: var(--color-border);
+
+  /* ---- Figures / infographics frame ---- */
+  --color-figure-border: var(--color-border);
+  --color-figure-caption: var(--color-text-muted);
+
+  /* ---- Spacing scale ---- */
+  --space-xs: 0.25em;
+  --space-sm: 0.5em;
+  --space-md: 1em;
+  --space-lg: 2em;
+  --space-xl: 3.5em;
+
+  /* ---- Misc ---- */
+  --radius-sm: 2px;
+}

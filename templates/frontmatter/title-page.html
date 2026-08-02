@@ -1,0 +1,15 @@
+<!--
+  Placeholders: {{BOOK_TITLE}} {{BOOK_SUBTITLE}} {{AUTHOR_NAME}} {{NICHE_KICKER}}
+  Omit the subtitle <p> entirely when brand-input has no subtitle;
+  omit the kicker <p> when the niche has no natural short label.
+  This is the first page in reading order — no folio/header shows
+  here (see base.css @page :first).
+-->
+<div class="doc-title-marker">{{BOOK_TITLE}}</div>
+<section class="title-page">
+  <p class="title-page-kicker">{{NICHE_KICKER}}</p>
+  <h1 class="title-page-title">{{BOOK_TITLE}}</h1>
+  <p class="title-page-subtitle">{{BOOK_SUBTITLE}}</p>
+  <hr class="title-page-rule">
+  <p class="title-page-author">{{AUTHOR_NAME}}</p>
+</section>

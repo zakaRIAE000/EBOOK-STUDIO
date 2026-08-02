@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ebook-studio/schemas/project-config.schema.json",
+  "title": "ProjectConfig",
+  "description": "Resolved project configuration written by studio:design to config/resolved.yaml — the merge of config/defaults.yaml -> theme preset -> config/generated.yaml -> config/user.yaml (parsed from brand-input.md). This is what src/design uses to instantiate design/tokens.css.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "language", "format", "disclaimer", "theme", "fonts", "palette"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "title", "author", "niche", "targetReader", "tone"],
+      "properties": {
+        "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "subtitle": { "type": ["string", "null"] },
+        "author": { "type": "string", "minLength": 1 },
+        "niche": { "type": "string", "minLength": 1 },
+        "targetReader": { "type": "string", "minLength": 1 },
+        "tone": { "type": "string", "minLength": 1 }
+      }
+    },
+    "language": {
+      "type": "string",
+      "const": "en-US",
+      "description": "Single output language for the whole pipeline."
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageWidth", "pageHeight", "marginOuter", "marginInner", "marginTop", "marginBottom"],
+      "properties": {
+        "pageWidth": { "type": "string" },
+        "pageHeight": { "type": "string" },
+        "marginOuter": { "type": "string" },
+        "marginInner": { "type": "string" },
+        "marginTop": { "type": "string" },
+        "marginBottom": { "type": "string" }
+      }
+    },
+    "disclaimer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "text"],
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "True for niches where copyright.html's disclaimer block is mandatory (finance/trading/health) — see src/design's niche rules."
+        },
+        "text": { "type": ["string", "null"] }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" }
+      }
+    },
+    "fonts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body", "heading", "mono"],
+      "properties": {
+        "body": { "type": "string", "minLength": 1 },
+        "heading": { "type": "string", "minLength": 1 },
+        "mono": { "type": "string", "minLength": 1 }
+      }
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bg", "bgAlt", "text", "textMuted", "heading",
+        "primary", "secondary", "accent", "border", "rule", "link"
+      ],
+      "properties": {
+        "bg": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "bgAlt": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "text": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "textMuted": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "heading": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "primary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "secondary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "border": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "rule": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "link": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      }
+    }
+  }
+}

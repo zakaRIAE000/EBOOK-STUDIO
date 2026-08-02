@@ -1,0 +1,22 @@
+<!--
+  Chapter opener + body. Placeholders filled by the layout-designer
+  agent from content/chapters/<n>.md + design/page-plan.json:
+    {{CHAPTER_ID}}      slug used as the in-document anchor, e.g. "ch-01"
+    {{CHAPTER_NUMBER}}  e.g. "01" (omit the whole .chapter-number block
+                         for Introduction/Conclusion — they have no number)
+    {{CHAPTER_TITLE}}   e.g. "Cold Outreach Basics"
+    {{CONTENT}}         body blocks assembled from templates/components/*
+                         partials per page-plan.json — never raw prose
+                         rendered as an image (R5), text stays selectable.
+  The first paragraph inside .body-content gets the drop cap
+  automatically (base.css targets :first-child::first-letter) —
+  do not wrap it in anything that breaks that selector.
+-->
+<section class="chapter-open" id="{{CHAPTER_ID}}">
+  <p class="chapter-number">{{CHAPTER_NUMBER}}</p>
+  <hr class="chapter-rule">
+  <h1 class="chapter-title">{{CHAPTER_TITLE}}</h1>
+  <div class="body-content">
+    {{CONTENT}}
+  </div>
+</section>

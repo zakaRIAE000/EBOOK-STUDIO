@@ -1,0 +1,8 @@
+/* Theme: default — no overrides beyond its tokens.json palette/fonts.
+   Every visual rule already lives in templates/base.css, driven entirely
+   by CSS variables (R7); a theme only needs to add rules here when its
+   aesthetic direction requires something base.css can't express through
+   tokens alone (e.g. a different callout shape, a rule-heavy divider
+   style). Concatenated after tokens.css and before base.css at render
+   time, so declarations here can still be overridden by a project's own
+   design decisions if needed. */
