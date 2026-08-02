@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { createRequire } from "node:module";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -82,7 +82,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-async function buildDocument(options: RenderOptions): Promise<string> {
+async function buildDocument(options: Pick<RenderOptions, "bodyHtml" | "css" | "title" | "lang">): Promise<string> {
   const polyfill = await loadPagedPolyfill();
   const css = options.css.join("\n");
   const lang = options.lang ?? "en-US";
@@ -101,46 +101,72 @@ ${options.bodyHtml}
 </html>`;
 }
 
+export interface PaginatedDocument {
+  browser: Browser;
+  page: Page;
+  pageCount: number;
+}
+
+/**
+ * Opens `options.bodyHtml`/`options.css` in a real browser and runs Paged.js
+ * pagination to completion. Shared by renderToPdf (which then prints/screenshots
+ * the result) and src/qc's no-overflow check (which instead measures the live
+ * DOM before ever calling page.pdf()) — both need the exact same pagination
+ * pass, not two implementations that could silently drift apart.
+ * Caller owns the returned browser and must close it.
+ */
+export async function openPaginatedDocument(
+  options: Pick<RenderOptions, "bodyHtml" | "css" | "title" | "lang" | "timeoutMs">,
+): Promise<PaginatedDocument> {
+  const html = await buildDocument(options);
+  const timeoutMs = options.timeoutMs ?? 60_000;
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "load" });
+
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const Paged = (window as unknown as { Paged: { Previewer: new () => PagedPreviewer } }).Paged;
+    const previewer = new Paged.Previewer();
+    (window as unknown as { __pagedRendered: boolean }).__pagedRendered = false;
+    previewer.on("rendered", (flow: { total: number }) => {
+      (window as unknown as { __pagedRendered: boolean }).__pagedRendered = true;
+      (window as unknown as { __pagedPageCount: number }).__pagedPageCount = flow.total;
+    });
+    await previewer.preview();
+  });
+
+  await page.waitForFunction(
+    () => (window as unknown as { __pagedRendered?: boolean }).__pagedRendered === true,
+    { timeout: timeoutMs },
+  );
+
+  const pageCount = await page.evaluate(
+    () => (window as unknown as { __pagedPageCount: number }).__pagedPageCount,
+  );
+
+  return { browser, page, pageCount };
+}
+
 /**
  * Renders HTML through Paged.js pagination in a real browser, then prints the
  * paginated result to a PDF (and optionally one PNG per page) via Playwright.
  */
 export async function renderToPdf(options: RenderOptions): Promise<RenderResult> {
-  const html = await buildDocument(options);
-  const timeoutMs = options.timeoutMs ?? 60_000;
-
   await mkdir(path.dirname(options.outputPdfPath), { recursive: true });
 
-  const browser = await chromium.launch();
+  const { browser, page, pageCount } = await openPaginatedDocument(options);
   try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load" });
-
-    await page.evaluate(async () => {
-      await document.fonts.ready;
-      const Paged = (window as unknown as { Paged: { Previewer: new () => PagedPreviewer } }).Paged;
-      const previewer = new Paged.Previewer();
-      (window as unknown as { __pagedRendered: boolean }).__pagedRendered = false;
-      previewer.on("rendered", (flow: { total: number }) => {
-        (window as unknown as { __pagedRendered: boolean }).__pagedRendered = true;
-        (window as unknown as { __pagedPageCount: number }).__pagedPageCount = flow.total;
-      });
-      await previewer.preview();
-    });
-
-    await page.waitForFunction(
-      () => (window as unknown as { __pagedRendered?: boolean }).__pagedRendered === true,
-      { timeout: timeoutMs },
-    );
-
-    const pageCount = await page.evaluate(
-      () => (window as unknown as { __pagedPageCount: number }).__pagedPageCount,
-    );
-
     await page.pdf({
       path: options.outputPdfPath,
       printBackground: true,
       preferCSSPageSize: true,
+      // Embeds a real bookmark tree (from h1/h2/h3) and tagged/accessible
+      // structure — the latter is also what makes Chromium populate the
+      // PDF's /Lang from <html lang>, which the qc metadata gate reads.
+      outline: true,
+      tagged: true,
     });
 
     const previewPaths: string[] = [];

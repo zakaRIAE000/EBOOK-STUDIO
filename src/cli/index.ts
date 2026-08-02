@@ -6,6 +6,7 @@ import { ingestProject, IngestError } from "../ingest/index.js";
 import { designProject, DesignError } from "../design/index.js";
 import { planProject, PlanError } from "../plan/index.js";
 import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
+import { runQc, QcError } from "../qc/run.js";
 
 class NotImplementedError extends Error {}
 class ProjectNotFoundError extends Error {}
@@ -143,6 +144,24 @@ function notImplementedStage(stage: string): () => Promise<{ message: string; de
   };
 }
 
+/**
+ * QC always writes reports/qc-report.json + .md before returning (R8: the
+ * evidence exists regardless of the verdict) — a NO-GO is a real, provable
+ * outcome, so it's surfaced the same way ingest/design/plan surface a
+ * genuine failure: throw so runStage records exitCode 1 and status "failed".
+ */
+async function runQcStage(projectSlug: string): Promise<{ message: string; details?: unknown }> {
+  const { report, reportMdPath } = await runQc({ projectSlug });
+  const passedCount = report.checks.filter((c) => c.status === "pass").length;
+  const failedIds = report.checks.filter((c) => c.status === "fail").map((c) => c.id);
+  const skippedIds = report.checks.filter((c) => c.status === "skipped").map((c) => c.id);
+  const summary = `QC ${report.overallPass ? "GO" : "NO-GO"}: ${passedCount}/${report.checks.length} gate(s) passed, aesthetic score ${report.aesthetic.total}/100. See ${reportMdPath}`;
+  if (!report.overallPass) {
+    throw new QcError(`${summary} — failing gate(s): ${failedIds.join(", ")}${skippedIds.length ? `; skipped: ${skippedIds.join(", ")}` : ""}`);
+  }
+  return { message: skippedIds.length ? `${summary} (skipped: ${skippedIds.join(", ")})` : summary, details: report };
+}
+
 // --- CLI wiring --------------------------------------------------------------
 
 const program = new Command();
@@ -215,7 +234,7 @@ program
     });
   });
 
-for (const stage of ["audit", "build", "qc"] as const) {
+for (const stage of ["audit", "build"] as const) {
   program
     .command(stage)
     .requiredOption("--project <slug>", "project slug under workspace/projects/")
@@ -223,6 +242,13 @@ for (const stage of ["audit", "build", "qc"] as const) {
       process.exitCode = await runStage(opts.project, stage, notImplementedStage(stage));
     });
 }
+
+program
+  .command("qc")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .action(async (opts: { project: string }) => {
+    process.exitCode = await runStage(opts.project, "qc", () => runQcStage(opts.project));
+  });
 
 program
   .command("all")
@@ -244,7 +270,7 @@ program
         return { message: `Planned ${result.pagePlan.chapters.length} chapter(s) → ${result.pagePlanPath}.`, details: result.pagePlan };
       }],
       ["build", notImplementedStage("build")],
-      ["qc", notImplementedStage("qc")],
+      ["qc", () => runQcStage(opts.project)],
     ];
 
     for (const [stage, fn] of stages) {
@@ -281,7 +307,7 @@ program
 try {
   await program.parseAsync(process.argv);
 } catch (err) {
-  if (err instanceof IngestError || err instanceof DesignError || err instanceof PlanError || err instanceof ProjectNotFoundError) {
+  if (err instanceof IngestError || err instanceof DesignError || err instanceof PlanError || err instanceof QcError || err instanceof ProjectNotFoundError) {
     console.error(err.message);
     process.exitCode = 1;
   } else if ((err as { code?: string }).code?.startsWith("commander.")) {
