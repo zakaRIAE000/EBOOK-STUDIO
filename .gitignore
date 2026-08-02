@@ -1,0 +1,20 @@
+# Dependencies / build output
+node_modules/
+dist/
+
+# Secrets / local machine config — never commit
+.env
+.mcp.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+npm-debug.log*
+
+# Per-ebook workspace: heavy/binary or fully-regenerable artifacts.
+# Everything else under workspace/projects/<slug>/ (content, config, design,
+# visuals, cover, reports, bonuses...) IS tracked — it's project state, not build output.
+workspace/projects/*/source/
+workspace/projects/*/output/
+workspace/projects/*/previews/
+workspace/projects/*/state/

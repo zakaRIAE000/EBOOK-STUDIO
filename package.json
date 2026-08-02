@@ -1,0 +1,36 @@
+{
+  "name": "ebook-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ebook refinement factory: Synthesise AI PDF + brand foundation -> premium 6x9 English-US PDF.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "studio:ingest": "tsx src/cli/index.ts ingest",
+    "studio:audit": "tsx src/cli/index.ts audit",
+    "studio:plan": "tsx src/cli/index.ts plan",
+    "studio:design": "tsx src/cli/index.ts design",
+    "studio:prototype": "tsx src/cli/index.ts prototype",
+    "studio:build": "tsx src/cli/index.ts build",
+    "studio:qc": "tsx src/cli/index.ts qc",
+    "studio:all": "tsx src/cli/index.ts all",
+    "studio:status": "tsx src/cli/index.ts status",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "commander": "^12.1.0",
+    "pagedjs": "^0.4.3",
+    "pdfjs-dist": "^4.6.82",
+    "playwright": "^1.47.0",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}
