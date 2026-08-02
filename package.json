@@ -26,6 +26,7 @@
     "pagedjs": "^0.4.3",
     "pdfjs-dist": "^4.6.82",
     "playwright": "^1.47.0",
+    "sharp": "^0.33.5",
     "yaml": "^2.5.1"
   },
   "devDependencies": {
@@ -36,6 +37,15 @@
   "allowScripts": {
     "core-js@2.6.12": true,
     "es5-ext@0.10.64": true,
-    "esbuild@0.28.1": true
+    "esbuild@0.28.1": true,
+    "sharp@0.33.5": true
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "pagedjs>@babel/polyfill>core-js#2.6.12": true,
+      "pagedjs>event-emitter>es5-ext#0.10.64": true,
+      "sharp#0.33.5": true,
+      "tsx>esbuild#0.28.1": true
+    }
   }
 }
