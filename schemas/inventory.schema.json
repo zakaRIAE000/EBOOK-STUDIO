@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ebook-studio/schemas/inventory.schema.json",
+  "title": "Inventory",
+  "description": "Structure detected by studio:ingest for a project's source PDF. Source of truth for chapter/bonus segmentation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceFile",
+    "sourceSha256",
+    "extractedAt",
+    "pageCount",
+    "fallbackUsed",
+    "chapters",
+    "bonuses",
+    "warnings"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "sourceFile": {
+      "type": "string",
+      "description": "Path to the source PDF, relative to the project root."
+    },
+    "sourceSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 of the untouched source PDF bytes (R1 proof it was never edited)."
+    },
+    "extractedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "pageCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fallbackUsed": {
+      "type": "boolean",
+      "description": "True if no chapter/bonus markers were detected and the whole source was dumped as a single file."
+    },
+    "chapters": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/chapter" }
+    },
+    "bonuses": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/bonus" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "definitions": {
+    "chapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "number", "title", "file", "startPage", "endPage", "wordCount"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Slug used as the markdown filename stem, e.g. '01-cold-outreach-basics'."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["introduction", "chapter", "conclusion", "unclassified"]
+        },
+        "number": {
+          "type": ["integer", "null"],
+          "description": "Chapter number as detected (e.g. from 'CHAPTER 01'). Null for introduction/conclusion/unclassified."
+        },
+        "title": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to the markdown file, relative to the project root (content/chapters/...)."
+        },
+        "startPage": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endPage": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "wordCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "bonus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "file", "startPage", "endPage", "wordCount"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Slug used as the markdown filename stem, e.g. 'test-checklist'."
+        },
+        "title": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to the markdown file, relative to the project root (bonuses/raw/...)."
+        },
+        "startPage": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endPage": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "wordCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

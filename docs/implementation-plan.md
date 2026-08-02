@@ -8,18 +8,18 @@ Ce qui existe, ce qui manque, et l'ordre de build. Aligné sur [BLUEPRINT-EBOOK-
 - Repo git initialisé, poussé sur GitHub.
 - `ARCHITECTURE-EBOOK-STUDIO.md` et `BLUEPRINT-EBOOK-STUDIO.md` à la racine.
 
-**Session 1 — Structure + fondations** *(cette session)*
+**Session 1 — Structure + fondations**
 - Arborescence complète créée (dossiers vides avec `.gitkeep` pour tout ce qui vient plus tard).
 - Fichiers racine écrits : `README.md`, `CLAUDE.md`, `.gitignore`, `.env.example`, `.mcp.example.json`, `package.json`, `tsconfig.json`, `docs/implementation-plan.md`.
 
-## Manque (par ordre de build)
+**Session 2 — Moteur : ingest + render + smoke test** *(cette session)*
+- `src/ingest/` : extraction pdfjs-dist (`legacy/build/pdf.mjs`), regroupement des items en lignes par coordonnée Y, détection colonnes (tableaux) par écart X, reconstruction paragraphes/listes/tableaux en markdown, détection CHAPTER NN/Introduction/Conclusion/BONUS (titre inline ou ligne suivante), SHA-256 du source, fallback fichier unique si aucun marqueur, `schemas/inventory.schema.json` validé via ajv avant écriture.
+- `src/render/` : HTML → Paged.js (polyfill inliné, pagination pilotée par `Previewer.on("rendered")`) → Playwright `page.pdf()` (`preferCSSPageSize`, `printBackground`) + un PNG par page (`.pagedjs_page` screenshotté) dans `previews/`.
+- `src/cli/` : commander, toutes les commandes `studio:*` branchées ; `ingest` et `prototype` implémentées, `audit`/`plan`/`design`/`build`/`qc` renvoient honnêtement `not_implemented` (exit 2, jamais un faux succès) ; chaque run persiste dans `state/build-state.json` (R8) avant de rendre la main.
+- `tests/sample/mini-source.pdf` : fixture 3 pages (Introduction / CHAPTER 01 avec liste numérotée + petit tableau / BONUS - Test Checklist), générée par `tests/sample/generate-fixture.ts` via `src/render` (jamais des octets écrits à la main).
+- Smoke test sur `workspace/projects/smoke/` : `npm run studio:ingest -- --project smoke` → exit 0, `inventory.json` correct, aucun warning.
 
-**Session 2 — Moteur : ingest + render + smoke test**
-- `src/ingest/` : extraction pdfjs-dist, détection CHAPTER/Introduction/Conclusion/BONUS, `inventory.json` + `schemas/inventory.schema.json`.
-- `src/render/` : HTML → Paged.js → Playwright PDF + PNG previews.
-- `src/cli/` : commander, branché sur les scripts `studio:*` de `package.json`, exit codes + `state/build-state.json` (R8).
-- `tests/sample/mini-source.pdf` : fixture 3 pages.
-- Smoke test sur `workspace/projects/smoke/`.
+## Manque (par ordre de build)
 
 **Session 3 — Templates + design system + plan déterministe** *(la plus critique pour la qualité)*
 - `templates/` complet (base.css @page 6×9, frontmatter/, backmatter/, components/).
