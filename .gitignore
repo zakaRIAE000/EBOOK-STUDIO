@@ -11,10 +11,6 @@ dist/
 Thumbs.db
 npm-debug.log*
 
-# Per-ebook workspace: heavy/binary or fully-regenerable artifacts.
-# Everything else under workspace/projects/<slug>/ (content, config, design,
-# visuals, cover, reports, bonuses...) IS tracked — it's project state, not build output.
-workspace/projects/*/source/
-workspace/projects/*/output/
-workspace/projects/*/previews/
-workspace/projects/*/state/
+# Per-ebook workspace: never tracked. The repo holds the factory, not the books.
+workspace/projects/
+!workspace/projects/.gitkeep
