@@ -1,6 +1,6 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Ajv } from "ajv";
 import inventorySchema from "../../schemas/inventory.schema.json" with { type: "json" };
@@ -86,10 +86,13 @@ const COLUMN_GAP_FONT_RATIO = 1.3;
 const COLUMN_GAP_MIN_PT = 14;
 /**
  * A vertical gap up to this multiple of font height is a plain CSS line-height wrap
- * (same paragraph); wider gaps carry paragraph margin and mark a new block. Tuned against
- * the fixture's 1.5 line-height (18pt gap at 12pt type must merge).
+ * (same paragraph); wider gaps carry paragraph margin and mark a new block. Empirically,
+ * within-paragraph line-wrap gaps top out well below paragraph-break gaps (measured across
+ * a real Synthesise AI source: wraps cluster at 1.2-2.42x font height, paragraph/section
+ * breaks start at 2.51x with a clean gap between the two clusters) — 2.46 sits in that gap.
+ * Also comfortably merges the fixture's 1.5 line-height (18pt gap at 12pt type).
  */
-const PARAGRAPH_LINE_GAP_RATIO = 1.7;
+const PARAGRAPH_LINE_GAP_RATIO = 2.46;
 const LIST_ITEM_RE = /^\s*\d+[.)]\s+\S/;
 
 function groupItemsIntoLines(items: RawTextItem[], page: number): RawLine[] {
@@ -248,7 +251,35 @@ function segmentDocument(lines: ClassifiedLine[], warnings: string[]): Section[]
     });
   }
 
-  return sections;
+  return mergeOrphanedDividerHeadings(sections, warnings);
+}
+
+/**
+ * Synthesise AI's source occasionally emits a bare divider heading (e.g. an all-caps
+ * "INTRODUCTION" title-page marker with no body) immediately before the real section of
+ * the same kind/title/number. That is a source-generation duplicate, not two sections —
+ * drop the empty one and keep the one with real content.
+ */
+function mergeOrphanedDividerHeadings(sections: Section[], warnings: string[]): Section[] {
+  const merged: Section[] = [];
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    const next = sections[i + 1];
+    const isOrphanedDivider =
+      section.bodyLines.length === 0 &&
+      next !== undefined &&
+      next.kind === section.kind &&
+      next.title === section.title &&
+      next.number === section.number;
+    if (isOrphanedDivider) {
+      warnings.push(
+        `Dropped an empty "${section.kind}" divider heading "${section.headingText}" (page ${section.startPage}) immediately followed by the real "${next.title}" section on page ${next.startPage} — an orphaned duplicate heading from the source, not a second section.`,
+      );
+      continue;
+    }
+    merged.push(section);
+  }
+  return merged;
 }
 
 // --- Block reconstruction (paragraphs / lists / tables) ---------------------
@@ -290,6 +321,11 @@ function buildBlocks(lines: ClassifiedLine[]): Block[] {
     while (i < lines.length) {
       const candidate = lines[i];
       if (candidate.isListItem || candidate.isTableRow || candidate.page !== prev.page) break;
+      // A font-size change (e.g. an 18pt sub-heading line meeting 12pt body text) is always
+      // a new block, independent of the gap ratio — a shared PARAGRAPH_LINE_GAP_RATIO can't
+      // tell a heading-to-body transition (gap ~1.8x avg height) from a same-size line-wrap
+      // (gap ~1.75-2.4x height) since both land in the same ratio range.
+      if (Math.abs(candidate.fontHeight - prev.fontHeight) > 0.5) break;
       const avgFontHeight = (candidate.fontHeight + prev.fontHeight) / 2;
       const gap = prev.y - candidate.y;
       if (gap > avgFontHeight * PARAGRAPH_LINE_GAP_RATIO) break;
@@ -300,6 +336,44 @@ function buildBlocks(lines: ClassifiedLine[]): Block[] {
     blocks.push({ type: "paragraph", text });
   }
   return blocks;
+}
+
+/**
+ * Drops a paragraph block whose text is byte-identical to the block right before it.
+ * Genuine prose never repeats a full paragraph back-to-back with nothing in between —
+ * this is the Synthesise AI source's duplicate-emit bug (same family as the orphaned
+ * divider headings above), caught here at the block level instead of the section level.
+ */
+function dedupeConsecutiveParagraphs(blocks: Block[], sectionTitle: string, page: number, warnings: string[]): Block[] {
+  const deduped: Block[] = [];
+  for (const block of blocks) {
+    const prev = deduped[deduped.length - 1];
+    if (block.type === "paragraph" && prev?.type === "paragraph" && prev.text === block.text) {
+      warnings.push(
+        `Dropped a duplicate paragraph in "${sectionTitle}" (page ${page}): "${block.text.slice(0, 80)}${block.text.length > 80 ? "…" : ""}" appeared twice back-to-back — a source-generation duplicate, not intentional repetition.`,
+      );
+      continue;
+    }
+    deduped.push(block);
+  }
+  return deduped;
+}
+
+/**
+ * Flags C1 control codepoints (U+0080-U+009F) leaking into extracted text. These aren't
+ * caught by the U+FFFD/"(cid:" checks in src/qc/checks/no-broken-chars.ts because they're
+ * valid Unicode codepoints — but they never belong in body prose, and are the signature of
+ * a source-generation artifact (e.g. a template/component's data leaking into the text
+ * layer instead of being rendered). Detection only — never rewritten automatically (R2/R3).
+ */
+function detectControlCharacters(text: string, sectionTitle: string, page: number, warnings: string[]): void {
+  const match = text.match(/[-]/);
+  if (!match || match.index === undefined) return;
+  const start = Math.max(0, match.index - 30);
+  const snippet = text.slice(start, match.index + 60).replace(/\s+/g, " ");
+  warnings.push(
+    `Suspicious control character(s) (U+0080-U+009F range) found in "${sectionTitle}" (page ${page}) — likely a source-generation artifact (e.g. a component's data leaking into text) rather than genuine prose. Context: "…${snippet}…". Left untouched — review before /design-system.`,
+  );
 }
 
 function renderTable(rows: string[][]): string {
@@ -315,17 +389,27 @@ function renderTable(rows: string[][]): string {
   return [header, separator, ...body].join("\n");
 }
 
-function renderMarkdown(headingText: string, subtitle: string | null, bodyLines: ClassifiedLine[]): string {
+function renderMarkdown(
+  headingText: string,
+  subtitle: string | null,
+  bodyLines: ClassifiedLine[],
+  sectionTitle: string,
+  page: number,
+  warnings: string[],
+): string {
   const parts: string[] = [`# ${headingText}`];
   if (subtitle) parts.push(`## ${subtitle}`);
 
-  for (const block of buildBlocks(bodyLines)) {
+  const blocks = dedupeConsecutiveParagraphs(buildBlocks(bodyLines), sectionTitle, page, warnings);
+  for (const block of blocks) {
     if (block.type === "paragraph") parts.push(block.text);
     else if (block.type === "list") parts.push(block.items.join("\n"));
     else parts.push(renderTable(block.rows));
   }
 
-  return `${parts.join("\n\n")}\n`;
+  const markdown = `${parts.join("\n\n")}\n`;
+  detectControlCharacters(markdown, sectionTitle, page, warnings);
+  return markdown;
 }
 
 function relativePosixPath(from: string, to: string): string {
@@ -354,6 +438,7 @@ async function extractLines(data: Uint8Array, warnings: string[]): Promise<{ lin
   }
 
   const lines: ClassifiedLine[] = [];
+  let strippedFooterCount = 0;
   for (let p = 1; p <= doc.numPages; p++) {
     try {
       const page = await doc.getPage(p);
@@ -368,13 +453,38 @@ async function extractLines(data: Uint8Array, warnings: string[]): Promise<{ lin
           height: it.height || Math.hypot(it.transform[2], it.transform[3]) || 10,
         }));
       const rawLines = groupItemsIntoLines(items, p);
-      lines.push(...rawLines.map(classifyLine).filter((l) => l.text.trim() !== ""));
+      const pageLines = rawLines.map(classifyLine).filter((l) => l.text.trim() !== "");
+      if (isFooterPageNumber(pageLines)) {
+        pageLines.pop();
+        strippedFooterCount++;
+      }
+      lines.push(...pageLines);
     } catch (err) {
       warnings.push(`Failed to extract text from page ${p}: ${(err as Error).message}`);
     }
   }
+  if (strippedFooterCount > 0) {
+    warnings.push(
+      `Stripped ${strippedFooterCount} page-footer number line(s) (a lone integer in a smaller font than body text, sitting last/lowest on its page) from the extracted text.`,
+    );
+  }
 
   return { lines, pageCount: doc.numPages };
+}
+
+/**
+ * A page-footer page number: the last (lowest) line on the page, containing nothing but
+ * digits, set in a smaller font than the rest of that page's content. Never a real content
+ * line — a numbered-list item always carries "." or ")" (LIST_ITEM_RE), and a bare number
+ * used in prose never sits alone as the final, smallest-font line on the page.
+ */
+function isFooterPageNumber(pageLines: ClassifiedLine[]): boolean {
+  if (pageLines.length < 2) return false;
+  const last = pageLines[pageLines.length - 1];
+  if (!/^\d{1,4}$/.test(last.text.trim())) return false;
+  const otherFontHeights = pageLines.slice(0, -1).map((l) => l.fontHeight);
+  const maxOtherFontHeight = Math.max(...otherFontHeights);
+  return last.fontHeight < maxOtherFontHeight;
 }
 
 // --- Orchestration -----------------------------------------------------------
@@ -404,6 +514,11 @@ export async function ingestProject(options: IngestOptions): Promise<IngestResul
 
   const chaptersDir = path.join(projectRoot, "content", "chapters");
   const bonusesDir = path.join(projectRoot, "bonuses", "raw");
+  // Ingest is deterministic and re-runnable (R9) — clear stale output first so a shifted
+  // chapter numbering (e.g. a merged divider heading changing every filename downstream)
+  // can't leave orphaned files from a previous run sitting next to the current ones.
+  await rm(chaptersDir, { recursive: true, force: true });
+  await rm(bonusesDir, { recursive: true, force: true });
   await mkdir(chaptersDir, { recursive: true });
   await mkdir(bonusesDir, { recursive: true });
 
@@ -442,7 +557,14 @@ export async function ingestProject(options: IngestOptions): Promise<IngestResul
     let bonusIndex = 0;
     for (const section of sections) {
       const subtitle = section.titleFromNextLine ? section.title : null;
-      const markdown = renderMarkdown(section.headingText, subtitle, section.bodyLines);
+      const markdown = renderMarkdown(
+        section.headingText,
+        subtitle,
+        section.bodyLines,
+        section.title || section.headingText,
+        section.startPage,
+        warnings,
+      );
 
       if (section.kind === "bonus") {
         const slug = slugify(section.title || section.headingText) || `bonus-${bonusIndex}`;
