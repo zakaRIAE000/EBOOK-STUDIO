@@ -93,6 +93,18 @@ const COLUMN_GAP_MIN_PT = 14;
  * Also comfortably merges the fixture's 1.5 line-height (18pt gap at 12pt type).
  */
 const PARAGRAPH_LINE_GAP_RATIO = 2.46;
+/**
+ * The boundary, inside a list, between "this line still belongs to the list" and "the list
+ * ended here". Serves both list-internal joins: a list item's own continuation (a wrapped
+ * sentence, or a bullet/description line under a field-header item), and the separation
+ * between one numbered item and the next. Measured separately from PARAGRAPH_LINE_GAP_RATIO
+ * because list gaps run wider than plain body-text line-wraps. Empirically, across the whole
+ * book: marker-to-continuation gaps cluster at 1.75-2.75x font height and item-to-item gaps at
+ * 1.75-2.42x, while the transition out of a list — into a new paragraph, or into an unrelated
+ * block that merely starts with a digit — consistently sits at 3.08x, with no strays between.
+ * 2.9 sits in that gap.
+ */
+const LIST_ITEM_GAP_RATIO = 2.9;
 const LIST_ITEM_RE = /^\s*\d+[.)]\s+\S/;
 
 function groupItemsIntoLines(items: RawTextItem[], page: number): RawLine[] {
@@ -289,6 +301,39 @@ type Block =
   | { type: "list"; items: string[] }
   | { type: "table"; rows: string[][] };
 
+/**
+ * True when `candidate` is a plain line-wrap continuation of `prev` — same page, same font
+ * size (a font-size change, e.g. an 18pt sub-heading meeting 12pt body text, is always a new
+ * block regardless of gap), and a vertical gap within `maxRatio`. Shared by both the paragraph
+ * branch (PARAGRAPH_LINE_GAP_RATIO) and the list branch (LIST_ITEM_GAP_RATIO) below — same
+ * mechanism, different empirically-measured tolerance per context.
+ */
+function isLineWrapContinuation(prev: ClassifiedLine, candidate: ClassifiedLine, maxRatio: number): boolean {
+  if (candidate.page !== prev.page) return false;
+  if (Math.abs(candidate.fontHeight - prev.fontHeight) > 0.5) return false;
+  const avgFontHeight = (candidate.fontHeight + prev.fontHeight) / 2;
+  const gap = prev.y - candidate.y;
+  return gap <= avgFontHeight * maxRatio;
+}
+
+/**
+ * True when `candidate` — a line that carries its own digit marker — is the next item of the
+ * same list as `prev`, rather than the first line of an unrelated block that merely happens to
+ * start with a digit. Without this, any such block gets silently welded onto the preceding list.
+ *
+ * Unlike isLineWrapContinuation, a page break is deliberately NOT a boundary here: a numbered
+ * list legitimately runs across a page (this book's worksheet spans items 6 -> 7 that way), and
+ * y-coordinates on two different pages aren't comparable, so only same-page gaps are measured.
+ * Font height is likewise not checked — a marker and the bullet line above it can legitimately
+ * differ in style while belonging to the same list.
+ */
+function isListItemSeparation(prev: ClassifiedLine, candidate: ClassifiedLine): boolean {
+  if (candidate.page !== prev.page) return true;
+  const avgFontHeight = (candidate.fontHeight + prev.fontHeight) / 2;
+  const gap = prev.y - candidate.y;
+  return gap <= avgFontHeight * LIST_ITEM_GAP_RATIO;
+}
+
 function buildBlocks(lines: ClassifiedLine[]): Block[] {
   const blocks: Block[] = [];
   let i = 0;
@@ -297,10 +342,33 @@ function buildBlocks(lines: ClassifiedLine[]): Block[] {
 
     if (line.isListItem) {
       const items: string[] = [];
-      while (i < lines.length && lines[i].isListItem) {
-        items.push(lines[i].text.trim());
+      let currentItem = line.text.trim();
+      let prev = line;
+      i++;
+      while (i < lines.length) {
+        const candidate = lines[i];
+        if (candidate.isTableRow) break;
+        if (candidate.isListItem) {
+          // Carrying a digit marker isn't enough to make this the list's next item — it also
+          // has to sit at list spacing. A marker further down the page begins an unrelated
+          // block; continuing into it would silently merge two separate lists.
+          if (!isListItemSeparation(prev, candidate)) break;
+          items.push(currentItem);
+          currentItem = candidate.text.trim();
+          prev = candidate;
+          i++;
+          continue;
+        }
+        // Not a new numbered item — absorb it into the current item if it's riding at
+        // normal within-item spacing (a wrapped continuation of the item's own sentence,
+        // or a bullet/description line under a short field-header item); a real paragraph
+        // break ends the list here instead.
+        if (!isLineWrapContinuation(prev, candidate, LIST_ITEM_GAP_RATIO)) break;
+        currentItem += ` ${candidate.text.trim()}`;
+        prev = candidate;
         i++;
       }
+      items.push(currentItem);
       blocks.push({ type: "list", items });
       continue;
     }
@@ -320,15 +388,8 @@ function buildBlocks(lines: ClassifiedLine[]): Block[] {
     i++;
     while (i < lines.length) {
       const candidate = lines[i];
-      if (candidate.isListItem || candidate.isTableRow || candidate.page !== prev.page) break;
-      // A font-size change (e.g. an 18pt sub-heading line meeting 12pt body text) is always
-      // a new block, independent of the gap ratio — a shared PARAGRAPH_LINE_GAP_RATIO can't
-      // tell a heading-to-body transition (gap ~1.8x avg height) from a same-size line-wrap
-      // (gap ~1.75-2.4x height) since both land in the same ratio range.
-      if (Math.abs(candidate.fontHeight - prev.fontHeight) > 0.5) break;
-      const avgFontHeight = (candidate.fontHeight + prev.fontHeight) / 2;
-      const gap = prev.y - candidate.y;
-      if (gap > avgFontHeight * PARAGRAPH_LINE_GAP_RATIO) break;
+      if (candidate.isListItem || candidate.isTableRow) break;
+      if (!isLineWrapContinuation(prev, candidate, PARAGRAPH_LINE_GAP_RATIO)) break;
       text += ` ${candidate.text.trim()}`;
       prev = candidate;
       i++;
@@ -357,6 +418,33 @@ function dedupeConsecutiveParagraphs(blocks: Block[], sectionTitle: string, page
     deduped.push(block);
   }
   return deduped;
+}
+
+/**
+ * Recognizes a callout/tip component whose structured props leaked into the text layer as a
+ * stringified object instead of being rendered as a visual box — e.g. a source-generation run
+ * reading `[CTRL]CALLOUT[CTRL]KIND[ª]TIP, EYEBROW[ª]"SIZING RULE", BODY[ª]"..."}]:`. The labels
+ * (CALLOUT/KIND/EYEBROW/BODY) are always literal; only the separator characters between them are
+ * mangled (control codepoints, "ª", etc.), so this matches on the labels and treats anything
+ * between them as noise — generic to any project hitting the same leak, not one hardcoded string.
+ * Recovers the eyebrow/body text exactly as extracted (no rewording — R2/R3) and reformats it as
+ * a blockquote so it's structurally distinct from surrounding prose. Final component choice
+ * (e.g. templates/components/tip-callout.html) is a layout decision for /chapter, not ingest —
+ * this only repairs the broken character-level artifact.
+ */
+const CALLOUT_LEAK_RE = /^[^a-z0-9]*callout[^a-z0-9]*kind[^a-z0-9"]*([a-z]+),\s*eyebrow[^a-z0-9"]*"([^"]+)",\s*body[^a-z0-9"]*"([^"]+)"\s*\}\]:?\s*$/i;
+
+function repairLeakedCalloutBlocks(blocks: Block[], sectionTitle: string, page: number, warnings: string[]): Block[] {
+  return blocks.map((block) => {
+    if (block.type !== "paragraph") return block;
+    const match = block.text.match(CALLOUT_LEAK_RE);
+    if (!match) return block;
+    const [, kind, eyebrow, body] = match;
+    warnings.push(
+      `Repaired a leaked "${kind.toLowerCase()}" callout artifact in "${sectionTitle}" (page ${page}): its structured props (eyebrow "${eyebrow}", body text) had leaked into the text layer as a mangled stringified object instead of being rendered as a component. Recovered the exact extracted text (no rewording) and reformatted as a blockquote. This is a character-level repair only — render it via the project's tip-callout component (eyebrow "${eyebrow}") when this chapter is laid out.`,
+    );
+    return { type: "paragraph", text: `> **${eyebrow}**\n>\n> ${body}` };
+  });
 }
 
 /**
@@ -400,7 +488,8 @@ function renderMarkdown(
   const parts: string[] = [`# ${headingText}`];
   if (subtitle) parts.push(`## ${subtitle}`);
 
-  const blocks = dedupeConsecutiveParagraphs(buildBlocks(bodyLines), sectionTitle, page, warnings);
+  const repaired = repairLeakedCalloutBlocks(buildBlocks(bodyLines), sectionTitle, page, warnings);
+  const blocks = dedupeConsecutiveParagraphs(repaired, sectionTitle, page, warnings);
   for (const block of blocks) {
     if (block.type === "paragraph") parts.push(block.text);
     else if (block.type === "list") parts.push(block.items.join("\n"));

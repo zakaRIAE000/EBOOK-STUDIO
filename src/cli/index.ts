@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { ingestProject, IngestError } from "../ingest/index.js";
+import { auditProject, AuditError } from "../audit/index.js";
 import { designProject, DesignError } from "../design/index.js";
 import { planProject, PlanError } from "../plan/index.js";
 import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
@@ -211,6 +212,17 @@ program
   });
 
 program
+  .command("audit")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .action(async (opts: { project: string }) => {
+    process.exitCode = await runStage(opts.project, "audit", async () => {
+      const result = await auditProject({ projectSlug: opts.project });
+      const summary = `Audited ${result.report.findingCount === 0 ? "clean — no issues" : `${result.report.findingCount} finding(s)`}. Wrote ${result.reportPath}`;
+      return { message: summary, details: result.report };
+    });
+  });
+
+program
   .command("design")
   .requiredOption("--project <slug>", "project slug under workspace/projects/")
   .action(async (opts: { project: string }) => {
@@ -234,7 +246,7 @@ program
     });
   });
 
-for (const stage of ["audit", "build"] as const) {
+for (const stage of ["build"] as const) {
   program
     .command(stage)
     .requiredOption("--project <slug>", "project slug under workspace/projects/")
@@ -260,7 +272,10 @@ program
         const result = await ingestProject({ projectSlug: opts.project });
         return { message: `Ingested ${result.inventory.chapters.length} chapter(s).`, details: result.inventory };
       }],
-      ["audit", notImplementedStage("audit")],
+      ["audit", async () => {
+        const result = await auditProject({ projectSlug: opts.project });
+        return { message: `Audited ${result.report.findingCount === 0 ? "clean" : `${result.report.findingCount} finding(s)`} → ${result.reportPath}.`, details: result.report };
+      }],
       ["design", async () => {
         const result = await designProject({ projectSlug: opts.project, repoRoot: REPO_ROOT });
         return { message: `Resolved config → ${result.resolvedPath}.`, details: result.config };
@@ -307,7 +322,7 @@ program
 try {
   await program.parseAsync(process.argv);
 } catch (err) {
-  if (err instanceof IngestError || err instanceof DesignError || err instanceof PlanError || err instanceof QcError || err instanceof ProjectNotFoundError) {
+  if (err instanceof IngestError || err instanceof AuditError || err instanceof DesignError || err instanceof PlanError || err instanceof QcError || err instanceof ProjectNotFoundError) {
     console.error(err.message);
     process.exitCode = 1;
   } else if ((err as { code?: string }).code?.startsWith("commander.")) {
