@@ -131,6 +131,9 @@ async function ensureBrandInputFile(
   }
 }
 
+/** Sentinel pushed into the line buffer where a blank line separated two paragraphs. */
+const PARAGRAPH_BREAK = "\n\n";
+
 /** Parses the brand-input.md form into a flat field map, keyed by FIELD_LABEL_MAP values. */
 function parseBrandInput(markdown: string): Record<string, string> {
   const withoutComments = markdown.replace(/<!--[\s\S]*?-->/g, "");
@@ -141,7 +144,11 @@ function parseBrandInput(markdown: string): Record<string, string> {
   let buffer: string[] = [];
 
   const flush = () => {
-    if (currentKey) fields[currentKey] = buffer.join(" ").trim();
+    if (currentKey) {
+      // Lines inside a paragraph rejoin with a space; PARAGRAPH_BREAK markers survive as
+      // real blank lines, so a multi-paragraph field keeps its structure.
+      fields[currentKey] = buffer.join(" ").replace(/\s*\n\n\s*/g, "\n\n").trim();
+    }
     currentKey = null;
     buffer = [];
   };
@@ -160,8 +167,16 @@ function parseBrandInput(markdown: string): Record<string, string> {
       continue;
     }
     if (!currentKey) continue;
-    if (line === "" || line.startsWith("#") || line.startsWith("---")) {
+    // A markdown heading or rule genuinely ends the field. A blank line does NOT — a
+    // real disclaimer runs several paragraphs, and flushing on the first blank line
+    // silently truncated it to its opening sentence. The next `**Field:**` marker,
+    // heading, or `---` closes the field instead.
+    if (line.startsWith("#") || line.startsWith("---")) {
       flush();
+      continue;
+    }
+    if (line === "") {
+      if (buffer.length > 0 && buffer[buffer.length - 1] !== PARAGRAPH_BREAK) buffer.push(PARAGRAPH_BREAK);
       continue;
     }
     buffer.push(line);
