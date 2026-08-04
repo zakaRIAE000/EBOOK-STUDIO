@@ -1,0 +1,34 @@
+<!--
+  Front cover — the physical outside cover, composed as a typographic
+  overlay on generated background art.
+
+  Placeholders: {{COVER_ART}} {{TITLE_LEAD}} {{TITLE_MAIN}} {{BOOK_SUBTITLE}}
+                {{AUTHOR_NAME}}
+
+  This is NOT a Paged.js page. base.css's .back-cover comment records that
+  true edge-to-edge bleed under Paged.js's fragmentation engine produced
+  inconsistent box sizes and was abandoned for interior pages; the outside
+  cover is rendered separately, as a single fixed-size box screenshotted
+  directly by Playwright. Pair it with templates/cover.css only — base.css
+  is for the book interior and is not loaded here.
+
+  TITLE_LEAD / TITLE_MAIN split the real book title for typographic
+  hierarchy only. Both halves together must reproduce the title verbatim —
+  never drop or reword a word to make it fit (use a smaller size instead).
+  Omit the subtitle <p> entirely when brand-input has no subtitle.
+
+  The art must carry no baked-in text: this overlay branch exists precisely
+  because the title is long and/or a subtitle is present (skills/cover-design,
+  "Production rule: where does the title live?"). Real text stays vector-sharp
+  at 300dpi even when the background art is upscaled.
+-->
+<div class="cover" style="background-image: url('{{COVER_ART}}')">
+  <header class="cover-type">
+    <p class="cover-title-lead">{{TITLE_LEAD}}</p>
+    <h1 class="cover-title-main">{{TITLE_MAIN}}</h1>
+    <p class="cover-subtitle">{{BOOK_SUBTITLE}}</p>
+  </header>
+  <footer class="cover-author">
+    <p class="cover-author-name">{{AUTHOR_NAME}}</p>
+  </footer>
+</div>

@@ -54,6 +54,13 @@ overwritten by the pipeline once it exists — edit it freely and re-run
 **Border:** 
 **Rule:** 
 **Link:** 
+**Danger:** 
+<!-- Danger = the negative/stop hue, used by status components and by any
+     diagram built on a success/caution/stop metaphor. Unlike success and
+     warning (which alias onto Secondary and Accent), this has no stand-in
+     in the palette above, so leaving it blank falls back to the theme's
+     red rather than to one of your brand hues. Set it if your brand has a
+     specific red; otherwise the default is fine. -->
 
 ## Fonts — optional
 

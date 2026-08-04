@@ -1,0 +1,113 @@
+/* ============================================================
+   Ebook Studio — front cover overlay (R7: every color and family
+   below resolves through design/tokens.css; nothing hardcoded).
+
+   Pairs with templates/frontmatter/cover.html. Deliberately does
+   NOT load base.css: that file owns the book interior (@page
+   geometry, folios, running headers) and none of it applies to a
+   single full-bleed outside cover.
+
+   Design space is 600x900 CSS px = 6x9in at 100dpi. The renderer
+   screenshots at deviceScaleFactor 3 to emit 1800x2700 @300dpi
+   (src/providers/types.ts's print spec). Keep every length below
+   in px or %, so that one scale factor is the only thing that has
+   to change to retarget a different output density.
+   ============================================================ */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter[opsz,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("../assets/fonts/literata/Literata[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: block;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 600px;
+  height: 900px;
+  background: var(--color-bg);
+}
+
+/* ---------------------------------------------------------
+   The cover box. Fixed 600x900 — no flex-grow, no percentage
+   heights that could collapse. The art is a background so the
+   overlay type composes on top of it without a stacking context
+   fight, and so a differently-sized master still fills the box
+   via `cover` rather than letterboxing.
+   --------------------------------------------------------- */
+.cover {
+  position: relative;
+  width: 600px;
+  height: 900px;
+  overflow: hidden;
+  background-color: var(--color-bg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0 9%;
+}
+
+/* Type sits in the two empty zones the art leaves: above the
+   descending polyline (top ~36%) and below the gold limit rule
+   (bottom ~30%). Those two numbers are properties of the chosen
+   art, so they live here as padding rather than in the template. */
+.cover-type { padding-top: 7.5%; }
+.cover-author { padding-bottom: 8%; }
+
+/* Sized and tracked to survive the 100px browse-grid thumbnail, not to
+   look best at full size: this line carries the niche keyword a shopper
+   scans for, and at 15px/0.3em it reduced to an illegible smear. Wide
+   tracking is the first thing to die at thumbnail scale — keep it modest. */
+.cover-title-lead {
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin-bottom: 16px;
+}
+
+.cover-title-main {
+  font-family: var(--font-heading);
+  /* 800 rather than the interior's --weight-heading (700): a cover
+     competes in a browse grid, not on a reading page. */
+  font-weight: 800;
+  font-size: 42px;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+.cover-subtitle {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  margin-top: 20px;
+  max-width: 88%;
+}
+
+.cover-author-name {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: var(--weight-body-bold);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}

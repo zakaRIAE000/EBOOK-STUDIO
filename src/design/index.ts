@@ -42,6 +42,8 @@ export interface ProjectConfig {
   palette: {
     bg: string; bgAlt: string; text: string; textMuted: string; heading: string;
     primary: string; secondary: string; accent: string; border: string; rule: string; link: string;
+    /** Negative/stop hue. Optional in brand-input.md; no other palette entry can substitute for it. */
+    danger: string;
   };
 }
 
@@ -109,6 +111,7 @@ const FIELD_LABEL_MAP: Record<string, string> = {
   "border": "border",
   "rule": "rule",
   "link": "link",
+  "danger": "danger",
   "body font": "fontBody",
   "heading font": "fontHeading",
   "mono font": "fontMono",
@@ -248,6 +251,7 @@ function buildResolvedConfig(
       border: fields.border ? normalizeHex(fields.border) : theme.palette.border,
       rule: fields.rule ? normalizeHex(fields.rule) : theme.palette.rule,
       link: fields.link ? normalizeHex(fields.link) : theme.palette.link,
+      danger: fields.danger ? normalizeHex(fields.danger) : theme.palette.danger,
     },
   };
 }
@@ -266,6 +270,7 @@ const TOKEN_CSS_VAR_BY_PALETTE_KEY: Record<keyof ProjectConfig["palette"], strin
   border: "color-border",
   rule: "color-rule",
   link: "color-link",
+  danger: "color-danger",
 };
 
 function setCssVar(css: string, varName: string, value: string): string {

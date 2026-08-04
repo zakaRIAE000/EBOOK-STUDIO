@@ -62,19 +62,57 @@
   --color-border: #d9d3c4;
   --color-rule: #c9c2ae;
   --color-link: #7a5c1e;
+  /* Negative/stop hue. A primitive rather than an alias because no other
+     palette entry can stand in for it: success and warning below alias
+     cleanly onto secondary and accent, but a brand palette is not
+     guaranteed to contain anything red, and aliasing "danger" onto a gold
+     or green would make a three-state diagram read as two states. Optional
+     in brand-input.md; falls back to the theme value. */
+  --color-danger: #b3402f;
+
+  /* ---- Semantic status ----
+     For content built on a success/caution/stop metaphor (traffic-light
+     gates, go/no-go rules, pass/fail states). Added because chapter-level
+     diagrams had no token to express those states and were improvising
+     with palette primitives, which made "red" indistinguishable from
+     "muted" — the same class of gap as the callout tokens.
+
+     success/warning alias onto the brand hues that already carry those
+     meanings. danger is a primitive (see --color-danger above) because no
+     brand palette is guaranteed to hold a red.
+
+     Never use color as the ONLY channel to distinguish these states — a
+     label or shape must carry the meaning too, for print and for readers
+     who cannot separate the hues. */
+  --color-success: var(--color-secondary);
+  --color-warning: var(--color-accent);
+  --color-status-danger: var(--color-danger);
 
   /* ---- Running header / folio ---- */
   --color-running-header: #8a8477;
   --color-folio: #8a8477;
   --color-chapter-number: var(--color-accent);
 
-  /* ---- Callouts ---- */
-  --color-callout-warning-bg: #fbeee9;
-  --color-callout-warning-border: #c65a35;
-  --color-callout-warning-text: #6e2f18;
-  --color-callout-tip-bg: #eef3ea;
-  --color-callout-tip-border: #5c7a4a;
-  --color-callout-tip-text: #2f4325;
+  /* ---- Callouts ----
+     Derived from the brand palette, like every other component token here.
+     These six were previously literal light-theme hex values (#fbeee9 /
+     #eef3ea backgrounds with dark green/rust text) and were the ONLY palette
+     entries src/design neither rewrites nor aliases — so they shipped
+     verbatim into every project regardless of its palette. On a dark book
+     that rendered a callout as a near-white patch: measured 16.74:1
+     luminance against a #13110D page, versus 1.10:1 for a panel that reads
+     as part of the page.
+
+     Tip and warning are distinguished by BORDER hue, not by background
+     lightness, so the distinction survives any palette. --color-secondary
+     and --color-accent are the two brand hues guaranteed to exist and to
+     differ from each other. */
+  --color-callout-warning-bg: var(--color-bg-alt);
+  --color-callout-warning-border: var(--color-accent);
+  --color-callout-warning-text: var(--color-text);
+  --color-callout-tip-bg: var(--color-bg-alt);
+  --color-callout-tip-border: var(--color-secondary);
+  --color-callout-tip-text: var(--color-text);
 
   /* ---- Tables ---- */
   --color-table-header-bg: var(--color-primary);

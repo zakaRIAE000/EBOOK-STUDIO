@@ -7,6 +7,7 @@ import { auditProject, AuditError } from "../audit/index.js";
 import { designProject, DesignError } from "../design/index.js";
 import { planProject, PlanError } from "../plan/index.js";
 import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
+import { generateCover, CoverError, type CoverSpec } from "../cover/index.js";
 import { runQc, QcError } from "../qc/run.js";
 
 class NotImplementedError extends Error {}
@@ -207,6 +208,36 @@ program
       const summary = `Rendered ${result.pageCount} page(s) to ${result.pdfPath}${
         result.previewPaths.length ? ` and ${result.previewPaths.length} preview PNG(s)` : ""
       }.`;
+      return { message: summary, details: result };
+    });
+  });
+
+program
+  .command("cover")
+  .description("Compose the front cover (art + typographic overlay) and render it at the print spec.")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .requiredOption("--art <path>", "background art (no baked-in text), relative to the project root")
+  .option("--title-lead <text>", "leading fragment of the title, split off for hierarchy; must be a literal prefix of the configured title")
+  .option("--specs <spec...>", "output specs to produce: print, kindle", ["print"])
+  .action(async (opts: { project: string; art: string; titleLead?: string; specs: string[] }) => {
+    process.exitCode = await runStage(opts.project, "cover", async () => {
+      const allowed: CoverSpec[] = ["print", "kindle"];
+      const invalid = opts.specs.filter((s) => !allowed.includes(s as CoverSpec));
+      if (invalid.length) {
+        throw new CoverError(`Unknown --specs value(s): ${invalid.join(", ")}. Allowed: ${allowed.join(", ")}.`);
+      }
+      const result = await generateCover({
+        projectSlug: opts.project,
+        repoRoot: REPO_ROOT,
+        art: opts.art,
+        titleLead: opts.titleLead,
+        specs: opts.specs as CoverSpec[],
+      });
+      const rendered = result.outputs.map((o) => `${o.spec} ${o.width}x${o.height} -> ${o.path}`).join("; ");
+      const summary =
+        `Composed ${result.coverHtmlPath} and rendered ${result.outputs.length} spec(s): ${rendered}. ` +
+        `Art is ${result.artDpi.artWidth}px wide (${result.artDpi.fullBleedDpi}dpi full-bleed at 6in, ` +
+        `${(result.artDpi.printSpecRatio * 100).toFixed(1)}% of the 1800px print spec).`;
       return { message: summary, details: result };
     });
   });
