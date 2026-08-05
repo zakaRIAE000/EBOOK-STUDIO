@@ -8,6 +8,7 @@ import { designProject, DesignError } from "../design/index.js";
 import { planProject, PlanError } from "../plan/index.js";
 import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
 import { generateCover, CoverError, type CoverSpec } from "../cover/index.js";
+import { generateBonus, BonusError, type BonusFormat } from "../bonus/index.js";
 import { runQc, QcError } from "../qc/run.js";
 
 class NotImplementedError extends Error {}
@@ -239,6 +240,41 @@ program
         `Art is ${result.artDpi.artWidth}px wide (${result.artDpi.fullBleedDpi}dpi full-bleed at 6in, ` +
         `${(result.artDpi.printSpecRatio * 100).toFixed(1)}% of the 1800px print spec).`;
       return { message: summary, details: result };
+    });
+  });
+
+program
+  .command("bonus")
+  .description("Turn one raw bonus into a standalone deliverable (checklist PDF, or worksheet PDF with real AcroForm fields).")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .requiredOption("--bonus <id>", "bonus id from inventory.json's bonuses[]")
+  .requiredOption("--format <format>", "deliverable format: checklist | worksheet")
+  .option("--value <text>", "human-assigned standalone price shown on the deliverable, e.g. \"$27\"")
+  .action(async (opts: { project: string; bonus: string; format: string; value?: string }) => {
+    // Stage key is per-bonus, so producing a second bonus never overwrites the
+    // record of the first (the flaw batch item 3e documents for prototype).
+    process.exitCode = await runStage(opts.project, `bonus:${opts.bonus}`, async () => {
+      const allowed: BonusFormat[] = ["checklist", "worksheet"];
+      if (!allowed.includes(opts.format as BonusFormat)) {
+        throw new BonusError(`Unknown --format "${opts.format}". Allowed: ${allowed.join(", ")}.`);
+      }
+      const result = await generateBonus({
+        projectSlug: opts.project,
+        repoRoot: REPO_ROOT,
+        bonusId: opts.bonus,
+        format: opts.format as BonusFormat,
+        displayedValue: opts.value,
+      });
+      // R8: this sentence is built from fields read back out of the written
+      // PDF, so "fillable" is never claimed on intent alone.
+      const fillNote =
+        result.format === "worksheet"
+          ? ` ${result.formFields.length} real AcroForm field(s) verified in the saved file: ${result.formFields.join(", ")}.`
+          : "";
+      return {
+        message: `Built ${result.format} "${result.bonusId}" — ${result.pageCount} page(s) -> ${result.pdfPath}.${fillNote}`,
+        details: result,
+      };
     });
   });
 

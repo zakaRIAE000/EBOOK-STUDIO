@@ -387,6 +387,28 @@ table,
   background: var(--color-table-row-alt-bg);
 }
 
+/* Optional semantic status accent on a comparison-table row, for tables whose
+   rows map a condition to a go / caution / stop action.
+
+   Deliberately a left EDGE, not a row background fill. A fill would fight the
+   nth-child zebra stripe above, and would force the text color to change per
+   row — the status hues each need a different text color to stay legible
+   (see the measured contrast note in tokens.template.css: light text on
+   --color-success is 2.80:1 and fails). An edge leaves body text on its normal
+   ground at full contrast and adds no such constraint.
+
+   The accent is always redundant with the row's own words — never the sole
+   channel carrying the state. */
+.comparison-table tbody tr.is-success td:first-child {
+  border-left: 3px solid var(--color-success);
+}
+.comparison-table tbody tr.is-warning td:first-child {
+  border-left: 3px solid var(--color-warning);
+}
+.comparison-table tbody tr.is-danger td:first-child {
+  border-left: 3px solid var(--color-status-danger);
+}
+
 /* -- Calculation card -- */
 .calculation-card {
   background: var(--color-calculation-bg);

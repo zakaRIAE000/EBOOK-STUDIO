@@ -3,6 +3,37 @@
   When (src/plan): a source table with <=4 columns. Wider tables
   stay as editorial-body markdown tables (a comparison-table this
   narrow is what actually reads well at 6x9in trim).
+
+  Also the right choice for a condition -> action lookup the source
+  states in prose: a table keeps every label as real selectable text
+  (R5) and lets a qualifier like "usually" sit in the cell, where an
+  SVG would compress it into a cramped label. Placing one does NOT
+  replace the source sentence — leave that paragraph in the body and
+  let the table supplement it (R2).
+
+  OPTIONAL STATUS ACCENTS on a tbody row, for tables whose rows map
+  a condition to a go / caution / stop action:
+
+    <tr class="is-success"> ... </tr>   var(--color-success)
+    <tr class="is-warning"> ... </tr>   var(--color-warning)
+    <tr class="is-danger">  ... </tr>   var(--color-status-danger)
+
+  These render as a 3px left edge on the row's first cell — see
+  base.css, "semantic status accent". Deliberately an edge and not a
+  row background fill: a fill fights the nth-child(even) zebra stripe
+  above it, and would force the text colour to change per row, since
+  the status hues each need a different one to stay legible (light
+  text on --color-success measures 2.80:1 and fails).
+
+  The classes are the entire mechanism — never add a background or
+  text colour of your own (R7). The accent must stay redundant with
+  the row's own words: colour is never the sole channel carrying the
+  state.
+
+  Placeholders: {{TABLE_CAPTION}} {{COLUMN_HEADER}} {{CELL}}
+  Add a caption only when it says something the cells do not — e.g.
+  binding an ambiguous column head to the list it refers to. Omit the
+  <caption> element entirely rather than restating the rows.
 -->
 <table class="comparison-table">
   <caption>{{TABLE_CAPTION}}</caption>
@@ -12,7 +43,8 @@
     </tr>
   </thead>
   <tbody>
-    <tr>
+    <!-- Drop the is-* class when the row carries no status meaning. -->
+    <tr class="is-success">
       <td>{{CELL}}</td>
     </tr>
   </tbody>

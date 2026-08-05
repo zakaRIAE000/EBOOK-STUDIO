@@ -1,0 +1,137 @@
+/* ============================================================
+   Ebook Studio — standalone bonus deliverables (checklist,
+   worksheet). R7 applies here exactly as it does in the book:
+   every colour and family resolves through design/tokens.css.
+   "R7 doesn't stop at the book's edge" — skills/bonus-productizer.
+
+   Paired with design/tokens.css only. base.css is the book
+   interior's stylesheet: its @page rules, folios, running
+   headers and body-copy rhythm are all wrong for a one-page
+   handout, so it is deliberately NOT loaded.
+   ============================================================ */
+
+@page {
+  /* Paged.js parses `size` ahead of the normal cascade and cannot
+     resolve var() there — same exception base.css documents. */
+  size: 6in 9in;
+  margin: 0.6in 0.6in 0.7in;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+/* ---- Header band: carries the book's motif so the bundle reads
+        as one product rather than a book plus loose extras. ---- */
+.bonus-sheet-header {
+  border-bottom: 2px solid var(--color-primary);
+  padding-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+.bonus-sheet-brand {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-meta);
+  font-weight: var(--weight-body-bold);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin-bottom: var(--space-sm);
+}
+.bonus-sheet-title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-h2);
+  font-weight: var(--weight-heading);
+  line-height: 1.15;
+  color: var(--color-heading);
+}
+.bonus-sheet-value {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-meta);
+  font-weight: var(--weight-body-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-top: var(--space-sm);
+}
+
+.bonus-sheet-body p {
+  margin-bottom: var(--space-md);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
+
+/* ---- Checklist: the same .checklist-box square the book uses,
+        drawn with a CSS border rather than a rasterised icon so it
+        stays crisp and recolourable (R5/R7). ---- */
+.checklist {
+  list-style: none;
+  margin: var(--space-lg) 0;
+}
+.checklist-item {
+  position: relative;
+  padding-left: 1.9em;
+  margin-bottom: var(--space-md);
+  font-size: var(--font-size-caption);
+  color: var(--color-text);
+  break-inside: avoid;
+}
+.checklist-box {
+  position: absolute;
+  left: 0;
+  top: 0.15em;
+  width: 0.95em;
+  height: 0.95em;
+  border: 1.5px solid var(--color-checklist-box-border);
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Worksheet fields.
+        `.worksheet-rule` is the write-in line. It is also the
+        measurement target: src/bonus reads its box out of the
+        paginated DOM and drops a real AcroForm text field on top
+        of it after the PDF is printed. Playwright's page.pdf()
+        flattens <input> elements, so the rule must stay a plain
+        element and the field must be added post-hoc.
+
+        Consequences for anyone editing this: keep .worksheet-rule
+        a block-level box with a real height, and do not move it
+        inside a transformed or position:fixed ancestor — the
+        measurement assumes its rect is comparable to its page's. ---- */
+.worksheet-fields {
+  list-style: none;
+  counter-reset: worksheet-field;
+  margin: var(--space-lg) 0;
+}
+.worksheet-field {
+  counter-increment: worksheet-field;
+  margin-bottom: var(--space-md);
+  break-inside: avoid;
+}
+.worksheet-label {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-caption);
+  font-weight: var(--weight-heading);
+  color: var(--color-heading);
+  margin-bottom: 0.15em;
+}
+.worksheet-label::before {
+  content: counter(worksheet-field) ". ";
+  color: var(--color-accent);
+}
+.worksheet-guide {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-muted);
+  margin-bottom: 0.3em;
+}
+.worksheet-rule {
+  display: block;
+  width: 100%;
+  height: 1.5em;
+  border-bottom: 1px solid var(--color-rule);
+}
