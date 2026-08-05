@@ -9,6 +9,7 @@ import { planProject, PlanError } from "../plan/index.js";
 import { renderToPdf, inlineLocalFontUrls } from "../render/index.js";
 import { generateCover, CoverError, type CoverSpec } from "../cover/index.js";
 import { generateBonus, BonusError, type BonusFormat } from "../bonus/index.js";
+import { assembleBook, AssembleError } from "../assemble/index.js";
 import { runQc, QcError } from "../qc/run.js";
 
 class NotImplementedError extends Error {}
@@ -262,6 +263,25 @@ program
   });
 
 program
+  .command("build")
+  .description("Compose cover, front matter, every chapter and back matter into the assembled book PDF.")
+  .requiredOption("--project <slug>", "project slug under workspace/projects/")
+  .action(async (opts: { project: string }) => {
+    process.exitCode = await runStage(opts.project, "build", async () => {
+      const result = await assembleBook({ projectSlug: opts.project, repoRoot: REPO_ROOT });
+      const skippedNote = result.skipped.length
+        ? ` Skipped: ${result.skipped.map((s) => s.section).join(", ")}.`
+        : "";
+      return {
+        message:
+          `Assembled ${result.pageCount} page(s) -> ${result.pdfPath}. ` +
+          `Sections: ${result.sections.join(" -> ")}. ${result.tocEntries.length} TOC entries.${skippedNote}`,
+        details: result,
+      };
+    });
+  });
+
+program
   .command("bonus")
   .description("Turn one raw bonus into a standalone deliverable (checklist PDF, or worksheet PDF with real AcroForm fields).")
   .requiredOption("--project <slug>", "project slug under workspace/projects/")
@@ -331,15 +351,6 @@ program
     });
   });
 
-for (const stage of ["build"] as const) {
-  program
-    .command(stage)
-    .requiredOption("--project <slug>", "project slug under workspace/projects/")
-    .action(async (opts: { project: string }) => {
-      process.exitCode = await runStage(opts.project, stage, notImplementedStage(stage));
-    });
-}
-
 program
   .command("qc")
   .requiredOption("--project <slug>", "project slug under workspace/projects/")
@@ -369,7 +380,10 @@ program
         const result = await planProject({ projectSlug: opts.project });
         return { message: `Planned ${result.pagePlan.chapters.length} chapter(s) → ${result.pagePlanPath}.`, details: result.pagePlan };
       }],
-      ["build", notImplementedStage("build")],
+      ["build", async () => {
+        const result = await assembleBook({ projectSlug: opts.project, repoRoot: REPO_ROOT });
+        return { message: `Assembled ${result.pageCount} page(s) → ${result.pdfPath}.`, details: result };
+      }],
       ["qc", () => runQcStage(opts.project)],
     ];
 

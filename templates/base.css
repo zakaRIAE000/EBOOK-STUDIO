@@ -122,6 +122,16 @@
   @bottom-right { content: none; }
 }
 
+/* The chapter-open named page must be declared in its own right, not only
+   through its :first variant. Paged.js registers a named page from the bare
+   @page rule; with only `@page chapter-open:first` present the name resolves
+   inconsistently and `break-before: page` on .chapter-open stops firing
+   between consecutive chapters — which fragments the opener, stranding the
+   number on one page and the h1 on the next. */
+@page chapter-open {
+  /* Intentionally empty: :first below carries the suppression. */
+}
+
 /* Chapter opener page: keep the folio, drop the running header
    (a book never repeats the chapter title on the page that
    already announces it in giant type).
@@ -147,6 +157,81 @@
   @top-right { content: none; }
   @bottom-left { content: none; }
   @bottom-right { content: none; }
+}
+
+/* The printed cover reproduced as the assembled PDF's first page: no folio,
+   no running header, and no margins — it is a full-bleed image, not a page
+   of the book's interior. */
+@page book-cover {
+  margin: 0;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+/* ---------------------------------------------------------
+   Front matter numbers in lower-roman, the body in arabic
+   restarting at 1 — standard book convention, and NOT wired
+   here before (skills/pdf-assembly called this out explicitly
+   rather than letting it be assumed).
+
+   Two halves, both required:
+     1. these @page rules render the folio as lower-roman for
+        every page carrying `page: front-matter`;
+     2. `.body-start` below resets the page counter at the first
+        chapter, so the body restarts at 1 no matter how many
+        front-matter pages preceded it.
+   --------------------------------------------------------- */
+@page front-matter {
+  @top-left { content: none; }
+  @top-right { content: none; }
+}
+/* Outer edge only, mirroring @page :left / :right for the body. Setting both
+   boxes on the bare `front-matter` rule printed the folio twice on every
+   front-matter page. */
+@page front-matter:left {
+  @bottom-left {
+    content: counter(page, lower-roman);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-meta);
+    color: var(--color-folio);
+  }
+  @bottom-right { content: none; }
+}
+@page front-matter:right {
+  @bottom-right {
+    content: counter(page, lower-roman);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-meta);
+    color: var(--color-folio);
+  }
+  @bottom-left { content: none; }
+}
+
+.cover-page {
+  page: book-cover;
+  margin: 0;
+}
+.cover-page img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.title-page,
+.copyright-page,
+.bonus-teaser,
+.toc-page {
+  page: front-matter;
+}
+
+/* Restarts the folio at arabic 1 on the first chapter. The assembler adds
+   this class to the first chapter only — every later chapter must keep
+   counting, not reset. */
+.body-start {
+  counter-reset: page 1;
 }
 
 /* Source string for the running header book title: a
@@ -246,7 +331,16 @@ h3 {
    then a drop cap on the first paragraph of body copy.
    --------------------------------------------------------- */
 .chapter-open {
+  /* Both spellings, deliberately. The modern `break-before` alone did NOT fire
+     in Paged.js between consecutive chapters: the Introduction broke correctly
+     only because it follows the TOC and the PAGE NAME changes there
+     (front-matter -> chapter-open), which forces a break on its own. Chapter to
+     chapter the name is identical, so nothing broke — the opener fragmented,
+     stranding the numeral at the foot of the previous chapter's last page and
+     pushing the h1 onto the next. Single-chapter prototype renders never
+     exercised this, so it only surfaced at /assemble. */
   break-before: page;
+  page-break-before: always;
   page: chapter-open;
   padding-top: 12%;
 }
