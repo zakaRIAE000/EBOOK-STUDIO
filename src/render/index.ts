@@ -1,7 +1,8 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { createRequire } from "node:module";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
@@ -64,6 +65,13 @@ export interface RenderOptions {
   title?: string;
   /** BCP-47 language tag for the <html lang> attribute. Defaults to en-US (project output language). */
   lang?: string;
+  /**
+   * Directory that relative asset URLs inside `bodyHtml` (`<img src="cover/final/...">`,
+   * `<image href="visuals/...">`) are written relative to — normally the project root.
+   * Without it those URLs resolve against about:blank and silently fail to load; see
+   * the note on openPaginatedDocument.
+   */
+  baseDir?: string;
   /** Paged.js pagination timeout in ms. Defaults to 60s. */
   timeoutMs?: number;
 }
@@ -114,15 +122,32 @@ export interface PaginatedDocument {
  * DOM before ever calling page.pdf()) — both need the exact same pagination
  * pass, not two implementations that could silently drift apart.
  * Caller owns the returned browser and must close it.
+ *
+ * `page.setContent()` writes the document into whatever page is currently open
+ * without navigating, so the document URL — and therefore the base URL every
+ * relative asset URL resolves against — is inherited from the page's current
+ * location. On a fresh page that location is `about:blank`, against which
+ * `cover/final/<x>.png` resolves to nothing and loads as a broken image: no
+ * request is made, no error is raised, and the PDF prints the alt text.
+ * Navigating to `baseDir` first makes relative asset URLs resolve against the
+ * project directory, exactly as they do when the written html/<slug>-book.html
+ * is opened directly. Fonts take the other route (inlined as data URIs by
+ * inlineLocalFontUrls) because their url()s are relative to the *stylesheet*,
+ * which has no location of its own once the CSS is inlined in a <style> tag.
  */
 export async function openPaginatedDocument(
-  options: Pick<RenderOptions, "bodyHtml" | "css" | "title" | "lang" | "timeoutMs">,
+  options: Pick<RenderOptions, "bodyHtml" | "css" | "title" | "lang" | "baseDir" | "timeoutMs">,
 ): Promise<PaginatedDocument> {
   const html = await buildDocument(options);
   const timeoutMs = options.timeoutMs ?? 60_000;
 
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  if (options.baseDir) {
+    // Trailing separator: a directory URL must end in "/" or the last segment
+    // is treated as a file name and stripped when resolving relative URLs.
+    await page.goto(pathToFileURL(path.join(options.baseDir, path.sep)).href);
+  }
   await page.setContent(html, { waitUntil: "load" });
 
   await page.evaluate(async () => {
@@ -172,6 +197,16 @@ export async function renderToPdf(options: RenderOptions): Promise<RenderResult>
     const previewPaths: string[] = [];
     if (options.previewsDir) {
       await mkdir(options.previewsDir, { recursive: true });
+      // Previews are written page-by-page under a name derived from the index,
+      // so a render that produces fewer pages than the last one leaves the tail
+      // of the old set behind. Those orphans are indistinguishable from real
+      // pages to anything reading the directory afterwards: the qc gates pair
+      // previews with PDF pages positionally, and a stale page-089.png silently
+      // shifted that pairing and cost ink-coverage its front-matter exemption.
+      // The directory must describe this render only.
+      for (const file of await readdir(options.previewsDir)) {
+        if (/^page-\d+\.png$/i.test(file)) await rm(path.join(options.previewsDir, file));
+      }
       const pageEls = await page.locator(".pagedjs_page").all();
       for (let i = 0; i < pageEls.length; i++) {
         const filePath = path.join(options.previewsDir, `page-${String(i + 1).padStart(3, "0")}.png`);

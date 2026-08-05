@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import { parse as parseYaml } from "yaml";
@@ -90,6 +90,60 @@ function tocLabel(chapter: Inventory["chapters"][number]): string {
   return chapter.number === null ? chapter.title : `${String(chapter.number).padStart(2, "0")}. ${chapter.title}`;
 }
 
+/**
+ * Places the running-header's book-title marker *inside* the first composed
+ * section instead of before it.
+ *
+ * The marker is zero-footprint by style (position:absolute, 0x0, see base.css)
+ * but not by layout: Paged.js still counts it as flowed content occupying a
+ * page. base.css already documents this for the title page — it had to drop
+ * `break-before` there because the marker sitting as a preceding sibling pushed
+ * a blank page in front of it. Every candidate first section now re-triggers it
+ * a different way: `.cover-page` carries `page: book-cover` and `.title-page`
+ * carries `page: front-matter`, and a named-page change forces a break of its
+ * own that no stylesheet edit can drop. Nesting the marker inside the section
+ * removes the preceding sibling entirely, so page 1 is the cover (or, with no
+ * cover, the title page) rather than a blank leaf. It stays the document's
+ * first element, which is all `string-set` needs.
+ */
+function withTitleMarker(sectionHtml: string, marker: string): string {
+  const openTag = sectionHtml.match(/<(?:section|div|main|article)\b[^>]*>/);
+  if (openTag?.index === undefined) return `${marker}\n${sectionHtml}`;
+  const insertAt = openTag.index + openTag[0].length;
+  return sectionHtml.slice(0, insertAt) + marker + sectionHtml.slice(insertAt);
+}
+
+const RASTER_EXT_RE = /\.(png|jpe?g)$/i;
+
+/**
+ * Finds the print cover in `cover/final/`, whatever /cover named it.
+ *
+ * src/cover writes `<slug>-cover.print.png` today, but assembly has no business
+ * re-deriving that filename: a project whose cover was produced by hand, under
+ * an earlier naming scheme, or as a JPEG is still a project with a cover, and
+ * reconstructing the expected name meant assembly silently skipped it instead.
+ * The `.print.` marker is what actually matters — it distinguishes the 6x9in
+ * 300dpi print render from the `.kindle.` listing image sitting beside it, which
+ * is cropped to 1600x2560 and must never become the interior's first page.
+ * Returns a project-root-relative POSIX path, the form asset references take in
+ * the assembled HTML.
+ */
+async function findPrintCover(projectRoot: string): Promise<string | null> {
+  const finalDir = path.join(projectRoot, "cover", "final");
+  let entries: string[];
+  try {
+    entries = (await readdir(finalDir)).filter((f) => RASTER_EXT_RE.test(f));
+  } catch {
+    return null;
+  }
+  const chosen =
+    entries.filter((f) => /\.print\./i.test(f)).sort()[0] ??
+    // No `.print.` variant: fall back to any cover that isn't the Kindle listing
+    // image or a back cover, so a hand-placed cover.png still gets composed.
+    entries.filter((f) => !/\.kindle\.|back/i.test(f)).sort()[0];
+  return chosen ? `cover/final/${chosen}` : null;
+}
+
 export async function assembleBook(options: AssembleOptions): Promise<AssembleResult> {
   const projectRoot = path.join(options.repoRoot, "workspace", "projects", options.projectSlug);
 
@@ -119,19 +173,19 @@ export async function assembleBook(options: AssembleOptions): Promise<AssembleRe
   const skipped: AssembleResult["skipped"] = [];
   const parts: string[] = [];
 
-  // The running header's book-title string comes from this marker. It is
-  // zero-footprint and must appear exactly once, before anything else — a
-  // second copy would silently re-set the string mid-document.
-  parts.push(`<div class="doc-title-marker">${escapeHtml(config.project.title)}</div>`);
+  // The running header's book-title string comes from this marker. It must
+  // appear exactly once — a second copy would silently re-set the string
+  // mid-document — and is nested into the first section (see withTitleMarker)
+  // rather than pushed as a part of its own.
+  const titleMarker = `<div class="doc-title-marker">${escapeHtml(config.project.title)}</div>`;
 
   // 1. Cover — the 6x9in/300dpi print render, not the Kindle listing image.
-  const coverRelative = `cover/final/${options.projectSlug}-cover.print.png`;
-  try {
-    await readFile(path.join(projectRoot, coverRelative));
+  const coverRelative = await findPrintCover(projectRoot);
+  if (coverRelative) {
     parts.push(`<section class="cover-page"><img src="${coverRelative}" alt="${escapeHtml(config.project.title)}"></section>`);
     sections.push("cover");
-  } catch {
-    skipped.push({ section: "cover", reason: `no print cover at ${coverRelative} — run studio:cover` });
+  } else {
+    skipped.push({ section: "cover", reason: "no print cover in cover/final/ — run studio:cover" });
   }
 
   // 2. Title page. base.css deliberately gives it no break-before.
@@ -273,6 +327,8 @@ export async function assembleBook(options: AssembleOptions): Promise<AssembleRe
     });
   }
 
+  parts[0] = withTitleMarker(parts[0], titleMarker);
+
   const bodyHtml = parts.join("\n\n");
   const htmlDir = path.join(projectRoot, "html");
   await mkdir(htmlDir, { recursive: true });
@@ -294,6 +350,9 @@ export async function assembleBook(options: AssembleOptions): Promise<AssembleRe
     previewsDir: path.join(projectRoot, "previews", "book"),
     title: config.project.title,
     lang: config.language,
+    // Asset references in bodyHtml are project-root-relative (see findPrintCover),
+    // and so is the html/<slug>-book.html we just wrote — both resolve from here.
+    baseDir: projectRoot,
   });
 
   // Real PDF metadata, not just visible text on the title page —

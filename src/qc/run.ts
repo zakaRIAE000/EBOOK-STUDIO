@@ -18,6 +18,7 @@ import { checkNoOverflow } from "./checks/no-overflow.js";
 import { checkMinFontSize } from "./checks/min-font-size.js";
 import { checkContrast } from "./checks/contrast.js";
 import { checkAssetsExist } from "./checks/assets-exist.js";
+import { checkCoverRenders } from "./checks/cover-renders.js";
 import { checkImageDpi } from "./checks/image-dpi.js";
 import { checkOutlineToc } from "./checks/outline-toc.js";
 import { checkMetadata } from "./checks/metadata.js";
@@ -50,6 +51,7 @@ const CHECKS = [
   checkMinFontSize,
   checkContrast,
   checkAssetsExist,
+  checkCoverRenders,
   checkImageDpi,
   checkOutlineToc,
   checkMetadata,
@@ -92,19 +94,36 @@ async function findBookHtml(projectRoot: string, slug: string): Promise<{ html: 
   return { html: await readFile(htmlPath, "utf-8"), htmlPath };
 }
 
+async function listPagePngs(dir: string): Promise<string[]> {
+  const files = (await readdir(dir)).filter((f) => /^page-\d+\.png$/i.test(f)).sort();
+  return files.map((f) => path.join(dir, f));
+}
+
 /**
- * Collects preview PNGs from `previews/`, including the per-chapter
- * subdirectories `studio:prototype` now writes into.
+ * Collects the preview PNGs that correspond to the PDF being checked.
  *
- * Previews used to land in one flat folder with every chapter reusing
- * `page-001.png`, so each render silently destroyed the last one — and this
- * function, feeding the ink-coverage gate, therefore scored whichever chapter
- * happened to render most recently while reporting as if it had covered the
- * book. Reading the subdirectories in sorted order restores a whole-book view.
+ * Order matters, and it is not arbitrary. `studio:build` writes the assembled
+ * book's previews to `previews/book/`, while `studio:prototype` writes
+ * per-chapter previews to `previews/chapter-NN/`. Both usually exist, and the
+ * chapter set is the wrong one once a book has been assembled: it omits cover,
+ * front matter and back matter entirely, so every page-indexed gate was scoring
+ * a document that isn't the PDF in `output/`. That mismatch is what let a
+ * blank/broken cover page pass QC — no gate ever looked at it. `book/` is
+ * therefore preferred whenever it exists, with the chapter set kept as the
+ * fallback for a project that has only been prototyped.
+ *
+ * (Previews used to land in one flat folder with every chapter reusing
+ * `page-001.png`, so each render silently destroyed the last one; the
+ * subdirectories are what fixed that.)
  */
 async function listPreviews(previewsDir: string): Promise<string[]> {
   try {
     const entries = await readdir(previewsDir, { withFileTypes: true });
+
+    if (entries.some((e) => e.isDirectory() && e.name === "book")) {
+      const bookPages = await listPagePngs(path.join(previewsDir, "book"));
+      if (bookPages.length > 0) return bookPages;
+    }
 
     const chapterDirs = entries
       .filter((e) => e.isDirectory() && /^chapter-/i.test(e.name))
@@ -113,9 +132,7 @@ async function listPreviews(previewsDir: string): Promise<string[]> {
     if (chapterDirs.length > 0) {
       const collected: string[] = [];
       for (const dir of chapterDirs) {
-        const full = path.join(previewsDir, dir);
-        const pages = (await readdir(full)).filter((f) => /^page-\d+\.png$/i.test(f)).sort();
-        collected.push(...pages.map((f) => path.join(full, f)));
+        collected.push(...(await listPagePngs(path.join(previewsDir, dir))));
       }
       return collected;
     }

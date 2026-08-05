@@ -42,6 +42,9 @@ async function detectFrontMatterPageCount(ctx: QcContext): Promise<FrontMatterDe
     bodyHtml: ctx.bookHtml,
     css: [baseCss, ctx.tokensCss],
     title: ctx.resolvedConfig.project.title,
+    // Same base dir the assembler rendered with, so this re-pagination produces
+    // the same page count and the same page classes it did there.
+    baseDir: ctx.projectRoot,
   });
 
   try {

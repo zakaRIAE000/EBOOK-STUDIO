@@ -132,6 +132,51 @@ export function decodePng(buffer: Buffer): DecodedPng {
 }
 
 /**
+ * Fraction of an NxN grid of cells that hold more than one quantized color —
+ * i.e. how much of the page carries something other than flat fill, and, just
+ * as importantly, *where*.
+ *
+ * This measures spatial spread rather than amount, which is what separates a
+ * full-bleed image from a page that merely has marks on it. Neither simpler
+ * measurement can: ink coverage counts pixels differing from the dominant
+ * color, so full-bleed artwork whose own dominant tone fills the page scores
+ * low; and a whole-page distinct-color count is dominated by text antialiasing,
+ * so a *broken* image plus one line of alt text scores in the hundreds, right
+ * alongside real artwork. (Both were measured against a genuinely broken cover
+ * before this replaced them — 0.65% ink and 563 colors, indistinguishable from
+ * a healthy page on either scale.) An image that actually covers its page
+ * textures every cell; marks concentrated in one corner texture only the cells
+ * they occupy.
+ */
+export function texturedCellRatio(png: DecodedPng, grid = 8): number {
+  const { width, height, pixels } = png;
+  let textured = 0;
+
+  for (let gy = 0; gy < grid; gy++) {
+    for (let gx = 0; gx < grid; gx++) {
+      const x0 = Math.floor((gx * width) / grid);
+      const x1 = Math.floor(((gx + 1) * width) / grid);
+      const y0 = Math.floor((gy * height) / grid);
+      const y1 = Math.floor(((gy + 1) * height) / grid);
+
+      let first = -1;
+      let varied = false;
+      for (let y = y0; y < y1 && !varied; y++) {
+        for (let x = x0; x < x1; x++) {
+          const o = (y * width + x) * 4;
+          const key = ((pixels[o] >> 3) << 10) | ((pixels[o + 1] >> 3) << 5) | (pixels[o + 2] >> 3);
+          if (first === -1) first = key;
+          else if (key !== first) { varied = true; break; }
+        }
+      }
+      if (varied) textured++;
+    }
+  }
+
+  return textured / (grid * grid);
+}
+
+/**
  * Fraction of pixels that are "ink" (meaningfully different from the page's
  * dominant background color) vs blank page. Background is estimated as the
  * most frequent quantized color rather than trusting a single corner pixel —

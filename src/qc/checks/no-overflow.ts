@@ -39,6 +39,10 @@ export async function checkNoOverflow(ctx: QcContext): Promise<QcCheckResult> {
     bodyHtml: ctx.bookHtml,
     css: [baseCss, ctx.tokensCss],
     title: ctx.resolvedConfig.project.title,
+    // Same base dir the assembler rendered with — without it the cover and any
+    // other relative asset load as a zero-size broken image here but not there,
+    // and this pass would measure a document the reader never sees.
+    baseDir: ctx.projectRoot,
   });
 
   try {
