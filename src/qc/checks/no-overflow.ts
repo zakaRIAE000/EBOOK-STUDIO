@@ -66,12 +66,29 @@ export async function checkNoOverflow(ctx: QcContext): Promise<QcCheckResult> {
           if (isPagedInternalWrapper || el.classList.contains("back-cover")) return;
           const r = el.getBoundingClientRect();
           if (r.width === 0 && r.height === 0) return;
-          const overflowPx = Math.max(
-            r.right - cRect.right,
-            r.bottom - cRect.bottom,
-            cRect.left - r.left,
-            cRect.top - r.top,
-          );
+
+          // Quirk 3, the same width inflation as quirk 1 but on the split
+          // element itself rather than Paged.js's wrapper around it. Any
+          // element carrying data-split-from/-to has been fragmented across
+          // pages, and its getBoundingClientRect().width comes back roughly 5x
+          // the true column — the assembled book's copyright page reported
+          // +1576px horizontally on a 418px column while rendering perfectly
+          // inside its margins, verified against the page screenshot.
+          //
+          // Scoped to the horizontal axis on purpose: vertical overflow is the
+          // measurement that actually detects clipped text, so a fragmented
+          // element is still fully checked top and bottom. Exempting it outright
+          // would blind the gate to the one failure mode it exists to catch.
+          const isSplitFragment =
+            el.hasAttribute("data-split-from") || el.hasAttribute("data-split-to");
+          const overflowPx = isSplitFragment
+            ? Math.max(r.bottom - cRect.bottom, cRect.top - r.top)
+            : Math.max(
+                r.right - cRect.right,
+                r.bottom - cRect.bottom,
+                cRect.left - r.left,
+                cRect.top - r.top,
+              );
           if (overflowPx > tolerance) {
             found.push({
               page: pageIndex + 1,
