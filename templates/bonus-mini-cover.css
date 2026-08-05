@@ -1,0 +1,150 @@
+/* ============================================================
+   Ebook Studio — bonus mini-cover (R7: every color and family
+   below resolves through design/tokens.css; nothing hardcoded).
+
+   Pairs with bonuses/<bonus-id>/mini-cover.html. ONE stylesheet
+   for every bonus in a project — the bonuses differ only in the
+   three strings they carry (title, value, and which art file
+   they point at), never in their CSS. Duplicating this per bonus
+   is how a bundle drifts into looking like loose extras.
+
+   Deliberately does NOT load base.css or bonus-sheet.css: those
+   own paginated interiors (@page geometry, folios, body rhythm)
+   and none of it applies to a single fixed-size cover box. This
+   file is the 400x600 sibling of templates/cover.css and mirrors
+   its structure on purpose.
+
+   Design space is 400x600 CSS px = a 2:3 mini-cover, the same
+   aspect as the 600x900 book cover so the two read as one
+   product at any size. The renderer screenshots at
+   deviceScaleFactor 3 to emit 1200x1800. Keep every length below
+   in px or %, so that one scale factor is the only thing that
+   has to change to retarget a different output density.
+   ============================================================ */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter[opsz,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("../assets/fonts/literata/Literata[opsz,wght].ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: block;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 400px;
+  height: 600px;
+  background: var(--color-bg);
+}
+
+/* ---------------------------------------------------------
+   The mini-cover box. Fixed 400x600 — no flex-grow, no
+   percentage heights that could collapse. Same construction as
+   templates/cover.css's .cover: the art is a background so the
+   overlay type composes on top of it without a stacking context
+   fight, and so the 1024x1536 master fills the box via `cover`
+   rather than letterboxing. 9% side padding is carried over
+   from the book cover unchanged, so the type block starts on
+   the same relative margin.
+   --------------------------------------------------------- */
+.mini-cover {
+  position: relative;
+  width: 400px;
+  height: 600px;
+  overflow: hidden;
+  background-color: var(--color-bg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0 9%;
+}
+
+/* Type sits in the two empty zones the art leaves: above the
+   descending polyline (top ~36%) and below the gold limit rule
+   (bottom ~30%). Those two numbers are properties of the chosen
+   art, so they live here as padding rather than in the template
+   — same split, same reasoning, as templates/cover.css. The
+   footer padding is larger than the book cover's because this
+   box is 300px shorter: the footer block here carries two lines
+   plus a rule, and it must still clear the gold rule at ~70%. */
+.mini-cover-type { padding-top: 7.5%; }
+.mini-cover-footer { padding-bottom: 8%; }
+
+/* The companion-piece signal. Same role, weight and tracking as
+   .cover-title-lead on the book cover (19px there, scaled by the
+   600->400 width ratio here), so a reader sees the same eyebrow
+   slot holding "BONUS" instead of the niche keyword. Tracking
+   stays modest: wide tracking is the first thing to die when
+   these get shown small in a bundle graphic. */
+.mini-cover-eyebrow {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin-bottom: 12px;
+}
+
+.mini-cover-title {
+  font-family: var(--font-heading);
+  /* 800 rather than the interior's --weight-heading (700), matching
+     .cover-title-main: a cover competes at a glance, not on a
+     reading page. */
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+/* The art's one graphic idea is a gold horizontal limit rule.
+   Echoing a short segment of it above the footer is what ties a
+   400px derivative back to the book without re-running the art:
+   same motif, smaller dose. Colour is --color-primary, the exact
+   token the rule in the art is drawn from. Carries no text on
+   it — dark-on-gold would be the only safe pairing there, and
+   this piece has no reason to need it. */
+.mini-cover-rule {
+  width: 44px;
+  height: 3px;
+  background: var(--color-primary);
+  margin-bottom: 14px;
+}
+
+/* The displayed value (skills/bonus-productizer). --color-accent
+   measures 9.76:1 on this art, and reads as the brighter of the
+   two golds so the number separates from the eyebrow rather than
+   echoing it. */
+.mini-cover-value {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--color-accent);
+  margin-bottom: 10px;
+}
+
+/* Same slot, same treatment as .cover-author-name on the book
+   cover — scaled for the shorter box. */
+.mini-cover-brand {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: var(--weight-body-bold);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}

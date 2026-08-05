@@ -90,6 +90,14 @@ body {
   border: 1.5px solid var(--color-checklist-box-border);
   border-radius: var(--radius-sm);
 }
+/* A worked example belonging to the check above it. Sits inside the same
+   <li> so it inherits the item's indent and stays visually attached, but
+   gets no checkbox of its own: it is read, not ticked. */
+.checklist-example {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-muted);
+  margin-top: 0.3em;
+}
 
 /* ---- Worksheet fields.
         `.worksheet-rule` is the write-in line. It is also the

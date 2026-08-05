@@ -79,11 +79,24 @@ function splitBullets(line: string): string[] {
     .filter(Boolean);
 }
 
+interface BonusItem {
+  /** The actionable line: a check to tick, or a worksheet field's numbered line. */
+  text: string;
+  /**
+   * A worked example belonging to the line above it. Checklist only. Rendered
+   * under its item WITHOUT its own checkbox — the source writes these as
+   * sibling bullets, but an example is something you read, not something you
+   * tick, so giving it a box misstates what the reader is meant to do with it.
+   * Pairing is structural only: the text is unchanged and nothing is merged
+   * away (R2).
+   */
+  note?: string;
+}
+
 interface ParsedBonus {
   title: string;
   intro: string[];
-  /** Checklist items, or worksheet field labels. */
-  items: string[];
+  items: BonusItem[];
   /** Trailing prose after the items. */
   outro: string[];
 }
@@ -100,10 +113,11 @@ function parseBonus(markdown: string, format: BonusFormat): ParsedBonus {
 
   let title = "";
   const intro: string[] = [];
-  const items: string[] = [];
+  const items: BonusItem[] = [];
   const outro: string[] = [];
 
   const NUMBERED_LINE = /^\d+\.\s/;
+  const EXAMPLE_LINE = /^example\b/i;
 
   for (const block of blocks) {
     if (/^#\s/.test(block)) continue; // the "# BONUS" marker
@@ -122,16 +136,25 @@ function parseBonus(markdown: string, format: BonusFormat): ParsedBonus {
     if (format === "worksheet") {
       const numbered = block.split("\n").map((l) => l.trim()).filter((l) => NUMBERED_LINE.test(l));
       if (numbered.length > 0) {
-        items.push(...numbered.map((l) => l.replace(NUMBERED_LINE, "")));
+        items.push(...numbered.map((l) => ({ text: l.replace(NUMBERED_LINE, "") })));
         continue;
       }
       (items.length ? outro : intro).push(block);
       continue;
     }
 
-    // A checklist's items are its bullet run.
+    // A checklist's items are its bullet run. The source alternates a check
+    // with a worked example as sibling bullets; an example attaches to the
+    // check above it rather than becoming a tickable item of its own.
     if (block.includes("•")) {
-      items.push(...splitBullets(block));
+      for (const bullet of splitBullets(block)) {
+        const previous = items[items.length - 1];
+        if (EXAMPLE_LINE.test(bullet) && previous && !previous.note) {
+          previous.note = bullet;
+        } else {
+          items.push({ text: bullet });
+        }
+      }
       continue;
     }
     (items.length ? outro : intro).push(block);
@@ -154,7 +177,10 @@ function fieldLabel(item: string): { label: string; guidance: string[] } {
 function buildChecklistHtml(parsed: ParsedBonus, cfg: ProjectConfig, value?: string): string {
   const intro = parsed.intro.map((p) => `      <p>${escapeHtml(p)}</p>`).join("\n");
   const items = parsed.items
-    .map((i) => `        <li class="checklist-item"><span class="checklist-box"></span>${escapeHtml(i)}</li>`)
+    .map((i) => {
+      const note = i.note ? `\n          <p class="checklist-example">${escapeHtml(i.note)}</p>` : "";
+      return `        <li class="checklist-item"><span class="checklist-box"></span>${escapeHtml(i.text)}${note}</li>`;
+    })
     .join("\n");
   const outro = parsed.outro.map((p) => `      <p>${escapeHtml(p)}</p>`).join("\n");
   return `<section class="bonus-sheet">
@@ -178,7 +204,7 @@ function buildWorksheetHtml(parsed: ParsedBonus, cfg: ProjectConfig, value?: str
   const intro = parsed.intro.map((p) => `      <p>${escapeHtml(p)}</p>`).join("\n");
   const rows = parsed.items
     .map((item, i) => {
-      const { label, guidance } = fieldLabel(item);
+      const { label, guidance } = fieldLabel(item.text);
       const guide = guidance.length
         ? `\n          <p class="worksheet-guide">${escapeHtml(guidance.join(" · "))}</p>`
         : "";
