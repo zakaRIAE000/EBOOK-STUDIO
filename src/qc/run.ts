@@ -92,10 +92,36 @@ async function findBookHtml(projectRoot: string, slug: string): Promise<{ html: 
   return { html: await readFile(htmlPath, "utf-8"), htmlPath };
 }
 
+/**
+ * Collects preview PNGs from `previews/`, including the per-chapter
+ * subdirectories `studio:prototype` now writes into.
+ *
+ * Previews used to land in one flat folder with every chapter reusing
+ * `page-001.png`, so each render silently destroyed the last one — and this
+ * function, feeding the ink-coverage gate, therefore scored whichever chapter
+ * happened to render most recently while reporting as if it had covered the
+ * book. Reading the subdirectories in sorted order restores a whole-book view.
+ */
 async function listPreviews(previewsDir: string): Promise<string[]> {
   try {
-    const entries = (await readdir(previewsDir)).filter((f) => /^page-\d+\.png$/i.test(f));
-    return entries.sort().map((f) => path.join(previewsDir, f));
+    const entries = await readdir(previewsDir, { withFileTypes: true });
+
+    const chapterDirs = entries
+      .filter((e) => e.isDirectory() && /^chapter-/i.test(e.name))
+      .map((e) => e.name)
+      .sort();
+    if (chapterDirs.length > 0) {
+      const collected: string[] = [];
+      for (const dir of chapterDirs) {
+        const full = path.join(previewsDir, dir);
+        const pages = (await readdir(full)).filter((f) => /^page-\d+\.png$/i.test(f)).sort();
+        collected.push(...pages.map((f) => path.join(full, f)));
+      }
+      return collected;
+    }
+
+    const flat = entries.filter((e) => e.isFile() && /^page-\d+\.png$/i.test(e.name)).map((e) => e.name);
+    return flat.sort().map((f) => path.join(previewsDir, f));
   } catch {
     return [];
   }

@@ -122,10 +122,21 @@
   @bottom-right { content: none; }
 }
 
-/* Chapter opener pages: keep the folio, drop the running header
+/* Chapter opener page: keep the folio, drop the running header
    (a book never repeats the chapter title on the page that
-   already announces it in giant type). */
-@page chapter-open {
+   already announces it in giant type).
+
+   `:first` is load-bearing, not decoration. templates/chapter.html
+   wraps the WHOLE chapter — opener and body — in one
+   section.chapter-open, so the chapter-open named page applies to
+   every page of the chapter. Without :first this rule therefore
+   suppressed the running header book-wide, and string-set
+   chapter-title / book-title were both computed and never consumed
+   by any live @top rule. Paged.js scopes this correctly: it marks
+   only the first page of a named run .pagedjs_chapter-open_first_page,
+   so subsequent pages fall through to @page :left / :right below and
+   get their headers back. */
+@page chapter-open:first {
   @top-left { content: none; }
   @top-right { content: none; }
 }
@@ -255,6 +266,37 @@ h3 {
   border: none;
   border-top: 1px solid var(--color-rule);
   margin: var(--space-md) 0 var(--space-lg);
+}
+
+/* The Introduction and Conclusion have no chapter number, so
+   templates/chapter.html omits the whole .chapter-number block for
+   them. That makes the rule the first thing in .chapter-open, and its
+   top margin — sized to sit *below* a numeral — then stacks on the
+   section's own padding-top, leaving the rule floating untethered
+   above the title. Keyed off actually being first rather than off the
+   section type, so a numbered chapter is untouched. */
+.chapter-open > .chapter-rule:first-child {
+  margin-top: 0;
+}
+
+/* A plain bullet run: body copy that happens to be listed, not a
+   structured component. Nothing styled generic `ul`, so every one of
+   these rendered at user-agent defaults — browser disc, browser
+   indent, none of the page's spacing rhythm, and no break protection.
+   `li` needs its own text-indent/text-align reset because the global
+   paragraph rule justifies and indents body text. */
+.body-list {
+  margin: var(--space-lg) 0;
+  padding-left: 1.4em;
+  break-inside: avoid;
+}
+.body-list li {
+  margin-bottom: var(--space-sm);
+  text-indent: 0;
+  text-align: left;
+}
+.body-list li::marker {
+  color: var(--color-accent);
 }
 
 .chapter-open .body-content > p:first-child::first-letter {

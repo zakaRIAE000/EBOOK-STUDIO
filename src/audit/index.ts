@@ -10,7 +10,13 @@ export interface AuditOptions {
   projectsRoot?: string;
 }
 
-export type AuditCategory = "duplicate-heading" | "broken-characters" | "near-empty-section" | "malformed-list";
+export type AuditCategory =
+  | "duplicate-heading"
+  | "broken-characters"
+  | "near-empty-section"
+  | "malformed-list"
+  | "truncated-paragraph"
+  | "unfulfilled-heading";
 
 export interface AuditFinding {
   category: AuditCategory;
@@ -210,6 +216,98 @@ function findMalformedLists(markdown: string, relativeFile: string, findings: Au
 
 // --- Orchestration -------------------------------------------------------------
 
+/**
+ * Flags any prose paragraph that does not end in terminal punctuation.
+ *
+ * Deliberately independent of the ingest-side cross-page join. That fix is
+ * geometric-plus-punctuation and deliberately strict — it only joins when the
+ * continuation also starts lowercase, so a sentence resuming on a proper noun
+ * stays split. This check has no such condition and no notion of pages, so it
+ * catches whatever the engine misses, including truncation the source shipped
+ * that no join could repair.
+ *
+ * Reporting only, never a gate: a heading rendered as a paragraph, or a
+ * deliberately clipped line, are both legitimate reasons to end without a full
+ * stop. The point is that a human sees it at /ingest rather than discovering it
+ * mid-layout, which is how all twelve of this book's splits were found.
+ */
+function findTruncatedParagraphs(markdown: string, relativeFile: string, findings: AuditFinding[]): void {
+  const blocks = markdown
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+  for (const block of blocks) {
+    if (/^#{1,6}\s/.test(block)) continue; // heading
+    if (/^[>|]/.test(block)) continue; // blockquote or table
+    if (/^([-*]|\d+[.)])\s/m.test(block)) continue; // list — items may legitimately lack punctuation
+    // Section headings reach the markdown as bare paragraph lines (the pipeline
+    // carries no heading sourceKind), and a heading correctly has no full stop.
+    // Shape, not punctuation, is what separates them from truncated prose: one
+    // line, few words. A sentence cut by a page break is a whole paragraph.
+    const isHeadingShaped = !block.includes("\n") && block.split(/\s+/).length <= 10;
+    if (isHeadingShaped) continue;
+    if (TERMINAL_PUNCTUATION_RE.test(block) || /[:;,"'’”)\]]$/.test(block)) continue;
+
+    findings.push({
+      category: "truncated-paragraph",
+      file: relativeFile,
+      message: `A paragraph ends without terminal punctuation: "…${block.slice(-60)}". Often a sentence cut by a source page break, or a heading that arrived as body text.`,
+    });
+  }
+}
+
+/** Headings whose wording promises a structure the section then has to contain. */
+const STRUCTURAL_PROMISE_RE =
+  /\b(do(e?s)?\s+and\s+(don'?ts?|do\s*nots?)|pros\s+and\s+cons|before\s+and\s+after|dos?\s*\/\s*don'?ts?)\b|^\s*\d+\s+(ways?|steps?|rules?|reasons?|things?|mistakes?)\b|\bthe\s+\d+\s+(ways?|steps?|rules?|reasons?|checks?)\b|\bvs\.?\b|\bversus\b/i;
+
+/**
+ * Flags a heading that promises a specific structure when the section beneath
+ * it does not deliver one.
+ *
+ * Two independent signals, either sufficient: the section contains no list at
+ * all, or its body is unusually thin against the book's OWN median section
+ * length. The threshold is relative for the same reason the near-empty check
+ * had to be — an absolute word floor false-flagged the test fixture's
+ * legitimately short sections.
+ *
+ * Reporting only. Whether a thin section is a defect or an authorial choice is
+ * a human call; the point is that it surfaces at /ingest instead of at layout,
+ * which is where this book's instance ("Do And Don't At The Sizing Line",
+ * promising a do/don't list the source never contained) was actually caught.
+ */
+function findUnfulfilledHeadings(markdown: string, relativeFile: string, findings: AuditFinding[]): void {
+  const blocks = markdown.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+
+  // Section = a heading-shaped line plus everything up to the next one.
+  const isHeadingLike = (b: string) =>
+    /^#{1,6}\s/.test(b) || (b.split("\n").length === 1 && b.split(/\s+/).length <= 10 && !/[.!?]$/.test(b));
+
+  const sections: { heading: string; body: string[] }[] = [];
+  for (const block of blocks) {
+    if (isHeadingLike(block)) sections.push({ heading: block.replace(/^#+\s*/, ""), body: [] });
+    else if (sections.length) sections[sections.length - 1].body.push(block);
+  }
+
+  const bodyWords = sections.map((s) => s.body.join(" ").split(/\s+/).filter(Boolean).length);
+  const medianWords = median(bodyWords.filter((n) => n > 0));
+
+  sections.forEach((section, i) => {
+    if (!STRUCTURAL_PROMISE_RE.test(section.heading)) return;
+    const hasList = section.body.some((b) => /^([-*]|\d+[.)])\s/m.test(b));
+    const words = bodyWords[i];
+    const thin = medianWords > 0 && words < medianWords * RELATIVE_DENSITY_FLOOR;
+    if (hasList && !thin) return;
+
+    const why = !hasList && thin ? "contains no list and is unusually thin" : !hasList ? "contains no list" : "is unusually thin";
+    findings.push({
+      category: "unfulfilled-heading",
+      file: relativeFile,
+      message: `Heading "${section.heading}" promises a specific structure, but the section beneath it ${why} (${words} words vs a ${medianWords.toFixed(0)}-word median for this file). Source may have lost content at generation.`,
+    });
+  });
+}
+
 function renderReportMarkdown(report: AuditReport): string {
   const lines: string[] = [
     `# Content audit — ${report.project}`,
@@ -223,12 +321,14 @@ function renderReportMarkdown(report: AuditReport): string {
   if (report.clean) {
     lines.push("No duplicate headings/titles, broken characters, near-empty sections, or malformed lists detected.", "");
   } else {
-    const categories: AuditCategory[] = ["duplicate-heading", "broken-characters", "near-empty-section", "malformed-list"];
+    const categories: AuditCategory[] = ["duplicate-heading", "broken-characters", "near-empty-section", "malformed-list", "truncated-paragraph", "unfulfilled-heading"];
     const labels: Record<AuditCategory, string> = {
       "duplicate-heading": "Duplicate headings/titles",
       "broken-characters": "Broken/mangled characters",
       "near-empty-section": "Near-empty pages/sections",
       "malformed-list": "Malformed lists",
+      "truncated-paragraph": "Paragraphs ending mid-sentence",
+      "unfulfilled-heading": "Headings promising a structure the section lacks",
     };
     for (const category of categories) {
       const inCategory = report.findings.filter((f) => f.category === category);
@@ -274,6 +374,8 @@ export async function auditProject(options: AuditOptions): Promise<AuditResult> 
     }
     findBrokenCharacters(markdown, entry.file, findings);
     findMalformedLists(markdown, entry.file, findings);
+    findTruncatedParagraphs(markdown, entry.file, findings);
+    findUnfulfilledHeadings(markdown, entry.file, findings);
   }
 
   const report: AuditReport = {

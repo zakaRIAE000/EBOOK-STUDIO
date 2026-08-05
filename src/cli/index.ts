@@ -165,6 +165,17 @@ async function runQcStage(projectSlug: string): Promise<{ message: string; detai
   return { message: skippedIds.length ? `${summary} (skipped: ${skippedIds.join(", ")})` : summary, details: report };
 }
 
+/**
+ * Derives a stable per-chapter label from an --html path: `html/4.html` -> "04",
+ * `html/0.html` -> "00". Anything that isn't a bare number keeps its own stem, so
+ * a one-off fragment still gets a distinct output rather than colliding with a
+ * chapter's.
+ */
+function chapterLabelFromHtmlPath(htmlPath: string): string {
+  const stem = path.basename(htmlPath).replace(/\.html?$/i, "");
+  return /^\d+$/.test(stem) ? stem.padStart(2, "0") : stem;
+}
+
 // --- CLI wiring --------------------------------------------------------------
 
 const program = new Command();
@@ -190,11 +201,18 @@ program
   .requiredOption("--project <slug>", "project slug under workspace/projects/")
   .requiredOption("--html <path>", "path to an HTML fragment file, relative to the project root")
   .option("--css <path...>", "path(s) to CSS file(s) to inline, relative to the project root")
-  .option("--out <path>", "output PDF path, relative to the project root", "output/prototype.pdf")
-  .option("--previews", "also export one PNG per page to previews/", false)
+  .option("--out <path>", "output PDF path, relative to the project root (default: output/chapter-NN.pdf, derived from --html)")
+  .option("--previews", "also export one PNG per page to previews/chapter-NN/", false)
   .option("--title <text>", "document title", "Ebook Studio prototype")
-  .action(async (opts: { project: string; html: string; css?: string[]; out: string; previews: boolean; title: string }) => {
-    process.exitCode = await runStage(opts.project, "prototype", async (projectRoot) => {
+  .action(async (opts: { project: string; html: string; css?: string[]; out?: string; previews: boolean; title: string }) => {
+    // Every chapter used to default to the same output/prototype.pdf and the
+    // same flat previews/ folder, so each render silently destroyed the one
+    // before it — and build-state kept a single `prototype` entry, leaving no
+    // record that earlier chapters were ever rendered at all (an R8 gap, not
+    // just an inconvenience). Both outputs and the stage key are now per-chapter.
+    const label = chapterLabelFromHtmlPath(opts.html);
+    const outPath = opts.out ?? `output/chapter-${label}.pdf`;
+    process.exitCode = await runStage(opts.project, `prototype:${label}`, async (projectRoot) => {
       const bodyHtml = await readFile(path.join(projectRoot, opts.html), "utf-8");
       const css = await Promise.all(
         (opts.css ?? []).map(async (cssPath) => {
@@ -203,8 +221,8 @@ program
           return inlineLocalFontUrls(text, path.dirname(resolved));
         }),
       );
-      const outputPdfPath = path.join(projectRoot, opts.out);
-      const previewsDir = opts.previews ? path.join(projectRoot, "previews") : undefined;
+      const outputPdfPath = path.join(projectRoot, outPath);
+      const previewsDir = opts.previews ? path.join(projectRoot, "previews", `chapter-${label}`) : undefined;
       const result = await renderToPdf({ bodyHtml, css, outputPdfPath, previewsDir, title: opts.title });
       const summary = `Rendered ${result.pageCount} page(s) to ${result.pdfPath}${
         result.previewPaths.length ? ` and ${result.previewPaths.length} preview PNG(s)` : ""

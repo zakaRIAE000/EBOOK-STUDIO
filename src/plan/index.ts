@@ -123,15 +123,60 @@ const CHECKLIST_ITEM_RE = /^(check|verify|confirm|ensure|make sure|double-check|
 const CALCULATION_RE = /=.*[-+*/%]|[-+*/%].*=/;
 const CALCULATION_MAX_LEN = 200;
 
-function classifyList(items: string[]): { component: ComponentType; rule: string } {
+/** Words that place an item in a sequence rather than in an unordered set. */
+const ORDINAL_WORD_RE = /\b(first|second|third|fourth|fifth|next|then|last|finally|afterwards?|before that|to begin|to start)\b/i;
+/** A following block asserting that the order of the list above it matters. */
+const ORDER_ASSERTION_RE = /\b(that|this)\s+(order|sequence)\s+matters?\b|\bin\s+(that|this)\s+order\b|\border\s+matters?\b/i;
+
+/**
+ * Chooses between `checklist` (order-independent criteria) and `process-steps`
+ * (an ordered sequence).
+ *
+ * Ordinal signals are tested BEFORE the verb wording, and that precedence is
+ * the whole point. Verb matching alone misclassified a list that was numbered
+ * in the source, sat under a heading reading "The Questions In Order", named
+ * each item's position ("Check the setup first… next… last"), and was followed
+ * by "That order matters" — every available signal said sequence, but each item
+ * happened to begin with "Check", so it was assigned `checklist`.
+ *
+ * That mistake is not cosmetic: `checklist` is documented as order-independent,
+ * and it has no counter, so rendering an ordered list that way also drops the
+ * source's own 1/2/3 markers. `process-steps` regenerates them via
+ * counter(process-step), so the numbering survives.
+ */
+function classifyList(
+  items: string[],
+  context: { ordered: boolean; nextBlockText: string },
+): { component: ComponentType; rule: string } {
   if (items.length < 3) {
     return { component: "editorial-body", rule: "ambiguous-leftover:short-list" };
   }
+
+  const ordinalCount = items.filter((i) => ORDINAL_WORD_RE.test(i)).length;
+  const assertsOrder = ORDER_ASSERTION_RE.test(context.nextBlockText);
+  if (context.ordered && (ordinalCount >= 2 || assertsOrder)) {
+    const why = assertsOrder ? "a following block asserts the order matters" : "items name their position";
+    return { component: "process-steps", rule: `ordinal signal: numbered source and ${why}` };
+  }
+
   const checklistCount = items.filter((i) => CHECKLIST_ITEM_RE.test(i)).length;
   if (checklistCount / items.length >= 0.6) {
     return { component: "checklist", rule: "check/do wording" };
   }
-  return { component: "process-steps", rule: "numbered list >=3 items" };
+  if (context.ordered) {
+    return { component: "process-steps", rule: "numbered list >=3 items" };
+  }
+  // An unordered list with no check wording is a plain bullet run: body copy
+  // that happens to be listed, not a structured component. It stays
+  // editorial-body and is laid out as a simple list.
+  //
+  // This branch used to be unreachable in practice, because inline `•` runs
+  // never became list blocks at all — so every list reaching here was numbered,
+  // and falling through to `process-steps` was silently correct. Once ingest
+  // started emitting real unordered lists, that fall-through began labelling
+  // plain bullet runs "numbered list >=3 items" and counting them toward the
+  // structured-component budget, which is neither true nor useful.
+  return { component: "editorial-body", rule: "unordered list, no ordering or check signal" };
 }
 
 function preview(text: string): string {
@@ -139,13 +184,24 @@ function preview(text: string): string {
   return flat.length > 80 ? `${flat.slice(0, 80)}…` : flat;
 }
 
-function classifyBlock(block: MdBlock, index: number): PlanBlock | null {
+/** Text of whatever follows a block — a list's order can be asserted by the sentence after it. */
+function blockText(block: MdBlock | undefined): string {
+  if (!block) return "";
+  if (block.kind === "list") return block.items.join(" ");
+  if (block.kind === "table") return block.header.join(" ");
+  return block.text;
+}
+
+function classifyBlock(block: MdBlock, index: number, next?: MdBlock): PlanBlock | null {
   switch (block.kind) {
     case "heading":
       return null; // structural, not a plannable content block
 
     case "list": {
-      const { component, rule } = classifyList(block.items);
+      const { component, rule } = classifyList(block.items, {
+        ordered: block.ordered,
+        nextBlockText: blockText(next),
+      });
       return { index, component, sourceKind: "list", rule, preview: preview(block.items.join(" / ")) };
     }
 
@@ -186,12 +242,29 @@ function classifyBlock(block: MdBlock, index: number): PlanBlock | null {
 
 const WORDS_PER_PAGE = 275; // heuristic for 11pt/1.55 line-height body copy at 6x9in trim
 
-function planChapter(chapterId: string, markdown: string, wordCount: number): ChapterPlan {
+/**
+ * Front and back matter are exempt from the non-body component budget.
+ *
+ * `minNonBodyComponents` is `ceil(pages / 4)`, so it rounds up to 1 for any
+ * non-zero page count. A short pure-prose introduction or conclusion — no list,
+ * no table, no blockquote, no heading anywhere in the source — therefore trips
+ * the warning by construction, and the only way to satisfy it would be to
+ * manufacture a component, i.e. to manufacture text (R3). Both of this book's
+ * matter sections had to have it explicitly overruled at their gates.
+ *
+ * A warning that can never be satisfied honestly trains its reader to ignore
+ * it, which costs more than it catches.
+ */
+function isFrontOrBackMatter(chapterType: string | undefined): boolean {
+  return chapterType === "introduction" || chapterType === "conclusion";
+}
+
+function planChapter(chapterId: string, markdown: string, wordCount: number, chapterType?: string): ChapterPlan {
   const mdBlocks = parseMarkdownBlocks(markdown);
   const blocks: PlanBlock[] = [];
   let contentIndex = 0;
-  for (const mdBlock of mdBlocks) {
-    const planned = classifyBlock(mdBlock, contentIndex);
+  for (const [mdIndex, mdBlock] of mdBlocks.entries()) {
+    const planned = classifyBlock(mdBlock, contentIndex, mdBlocks[mdIndex + 1]);
     if (planned) {
       blocks.push(planned);
       contentIndex++;
@@ -235,7 +308,7 @@ function planChapter(chapterId: string, markdown: string, wordCount: number): Ch
       `editorial-body is ${(editorialBodyRatio * 100).toFixed(0)}% of this chapter's blocks (>70%) — mostly plain prose, few structured components.`,
     );
   }
-  if (actualNonBodyComponents < minNonBodyComponents) {
+  if (actualNonBodyComponents < minNonBodyComponents && !isFrontOrBackMatter(chapterType)) {
     warnings.push(
       `only ${actualNonBodyComponents} non-body component(s) across an estimated ${estimatedPages.toFixed(1)} page(s) — budget wants >=1 per 4 pages (>= ${minNonBodyComponents}).`,
     );
@@ -302,7 +375,7 @@ export async function planProject(options: PlanOptions): Promise<PlanResult> {
   const chapters: ChapterPlan[] = [];
   for (const chapter of inventory.chapters) {
     const markdown = await readFile(path.join(projectRoot, chapter.file), "utf-8");
-    chapters.push(planChapter(chapter.id, markdown, chapter.wordCount));
+    chapters.push(planChapter(chapter.id, markdown, chapter.wordCount, chapter.type));
   }
 
   const pagePlan: PagePlan = {

@@ -245,6 +245,27 @@ function segmentDocument(lines: ClassifiedLine[], warnings: string[]): Section[]
         title = next.text.trim();
         bodyStart = headingIndex + 2;
         titleFromNextLine = true;
+
+        // A chapter title too long for one line wraps onto a second. Only the
+        // first line was taken as the title, so the remainder was emitted as an
+        // ordinary body block and the title shipped truncated — into
+        // inventory.json, the h1, the running header and the file slug. Three
+        // of this book's titles were cut that way, one of them mid-phrase.
+        //
+        // Absorb any following line that is still set at title height: the size
+        // change from title to body is what ends the heading, exactly as it ends
+        // any other block (§1). Body copy is a different height, so a
+        // single-line title stops here on its first test.
+        let titlePrev = next;
+        while (bodyStart < boundary) {
+          const continuation = lines[bodyStart];
+          if (!continuation || continuation.isListItem || continuation.isTableRow) break;
+          if (matchHeading(continuation.text)) break;
+          if (!isLineWrapContinuation(titlePrev, continuation, PARAGRAPH_LINE_GAP_RATIO)) break;
+          title += ` ${continuation.text.trim()}`;
+          titlePrev = continuation;
+          bodyStart++;
+        }
       } else {
         warnings.push(`${match.kind} heading "${headingLine.text}" (page ${headingLine.page}) has no detected title.`);
       }
@@ -314,6 +335,45 @@ function isLineWrapContinuation(prev: ClassifiedLine, candidate: ClassifiedLine,
   const avgFontHeight = (candidate.fontHeight + prev.fontHeight) / 2;
   const gap = prev.y - candidate.y;
   return gap <= avgFontHeight * maxRatio;
+}
+
+/** A block that genuinely ended will close on punctuation; one cut mid-sentence will not. */
+const TERMINAL_PUNCTUATION_RE = /[.!?:;"'’”)\]]$/;
+
+/**
+ * True when `candidate` continues `prev`'s sentence across a page break.
+ *
+ * isLineWrapContinuation cannot answer this: it compares y-coordinates, and a
+ * y on page N+1 is not comparable to a y on page N — the new page resets to the
+ * top, so the "gap" is meaningless. The paragraph branch therefore had no
+ * cross-page rule at all, and every sentence the source broke over a page seam
+ * arrived as two paragraphs cut mid-clause.
+ *
+ * Punctuation is the signal that replaces geometry here: a paragraph that
+ * really ended closes on terminal punctuation. Three conditions must hold
+ * together, because any one alone is too weak:
+ *
+ *  1. consecutive pages — not a gap within a page, which the ratio already covers;
+ *  2. same font height — a heading meeting body text is a real boundary (see §1);
+ *  3. `prev` does not end in terminal punctuation, and `candidate` starts
+ *     lowercase.
+ *
+ * Condition 3's lowercase half is deliberately strict. Dropping it would also
+ * catch continuations resuming on a proper noun, but it would risk welding two
+ * genuinely separate paragraphs together whenever the first merely lacked
+ * punctuation — and a wrongly joined paragraph corrupts text silently, while a
+ * missed join stays visible and is caught at the /audit gate by the
+ * terminal-punctuation check. Bias toward the failure that gets noticed.
+ */
+function isCrossPageContinuation(prev: ClassifiedLine, candidate: ClassifiedLine): boolean {
+  if (candidate.page !== prev.page + 1) return false;
+  if (Math.abs(candidate.fontHeight - prev.fontHeight) > 0.5) return false;
+  const prevText = prev.text.trim();
+  const candidateText = candidate.text.trim();
+  if (prevText === "" || candidateText === "") return false;
+  if (TERMINAL_PUNCTUATION_RE.test(prevText)) return false;
+  const firstChar = candidateText[0];
+  return firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase();
 }
 
 /**
@@ -389,14 +449,47 @@ function buildBlocks(lines: ClassifiedLine[]): Block[] {
     while (i < lines.length) {
       const candidate = lines[i];
       if (candidate.isListItem || candidate.isTableRow) break;
-      if (!isLineWrapContinuation(prev, candidate, PARAGRAPH_LINE_GAP_RATIO)) break;
+      const continuesOnPage = isLineWrapContinuation(prev, candidate, PARAGRAPH_LINE_GAP_RATIO);
+      if (!continuesOnPage && !isCrossPageContinuation(prev, candidate)) break;
       text += ` ${candidate.text.trim()}`;
       prev = candidate;
       i++;
     }
     blocks.push({ type: "paragraph", text });
   }
-  return blocks;
+  return splitInlineBulletRuns(blocks);
+}
+
+/** A run of `•`-delimited segments the source wrote inline inside one paragraph. */
+const INLINE_BULLET = "•";
+
+/**
+ * Promotes a paragraph that is really a bullet run into a proper list block.
+ *
+ * The source writes some lists with inline `•` glyphs rather than as separate
+ * lines, so line-based reconstruction correctly produces one paragraph — and
+ * `src/plan` then sees `sourceKind: "paragraph"`, its list rules never fire,
+ * and the block is classified `editorial-body`. That cost a hand deviation in
+ * every chapter carrying one, and it also made the plan under-count
+ * `actualNonBodyComponents` and warn about a shortfall its own parser created.
+ *
+ * Conservative on purpose: the paragraph must *start* with the glyph and yield
+ * at least two segments. A paragraph merely mentioning a bullet mid-sentence is
+ * left alone, and worksheet-style numbered items — which use `•` internally to
+ * separate a field's label from its guidance — are already `list` blocks by the
+ * time they get here, so they never reach this function.
+ */
+function splitInlineBulletRuns(blocks: Block[]): Block[] {
+  return blocks.map((block) => {
+    if (block.type !== "paragraph") return block;
+    const text = block.text.trim();
+    if (!text.startsWith(INLINE_BULLET)) return block;
+    const items = text
+      .split(INLINE_BULLET)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return items.length >= 2 ? { type: "list" as const, items } : block;
+  });
 }
 
 /**
@@ -477,6 +570,23 @@ function renderTable(rows: string[][]): string {
   return [header, separator, ...body].join("\n");
 }
 
+/**
+ * Emits list items as real markdown list syntax.
+ *
+ * This matters more than it looks: `src/plan` re-parses the generated markdown
+ * and decides `sourceKind` from the line's marker (`1.` or `-`). Writing items
+ * as bare lines makes a list indistinguishable from consecutive paragraphs, so
+ * the plan classifies every one of them `editorial-body` and its list rules
+ * never fire — which is most of what made inline bullet runs invisible to it.
+ *
+ * Items lifted from numbered source lines already carry their own `1.` marker
+ * and are emitted untouched, so the source's own numbering survives rather than
+ * being regenerated (and possibly renumbered) here.
+ */
+function renderListItems(items: string[]): string {
+  return items.map((item) => (LIST_ITEM_RE.test(item) ? item : `- ${item}`)).join("\n");
+}
+
 function renderMarkdown(
   headingText: string,
   subtitle: string | null,
@@ -492,7 +602,7 @@ function renderMarkdown(
   const blocks = dedupeConsecutiveParagraphs(repaired, sectionTitle, page, warnings);
   for (const block of blocks) {
     if (block.type === "paragraph") parts.push(block.text);
-    else if (block.type === "list") parts.push(block.items.join("\n"));
+    else if (block.type === "list") parts.push(renderListItems(block.items));
     else parts.push(renderTable(block.rows));
   }
 
