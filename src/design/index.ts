@@ -37,6 +37,23 @@ export interface ProjectConfig {
     marginBottom: string;
   };
   disclaimer: { required: boolean; text: string | null };
+  /**
+   * Back-matter copy. All optional: the CTA and back cover are composed only
+   * when the project actually supplies their words. Nothing here can be
+   * generated — a punchline or an offer written by the pipeline would be a
+   * claim the author never made (R3), so an absent field means the section is
+   * skipped, never filled with placeholder prose.
+   */
+  backMatter: {
+    ctaTitle: string | null;
+    ctaContent: string | null;
+    /** Optional external destination. Omitted entirely for a self-contained book. */
+    ctaLink: string | null;
+    ctaLinkLabel: string | null;
+    backCoverPunchline: string | null;
+    /** Blank-line separated in brand-input.md, so a bullet may itself contain a dash. */
+    backCoverBullets: string[];
+  };
   theme: { name: string };
   fonts: { body: string; heading: string; mono: string };
   palette: {
@@ -112,6 +129,12 @@ const FIELD_LABEL_MAP: Record<string, string> = {
   "rule": "rule",
   "link": "link",
   "danger": "danger",
+  "cta title": "ctaTitle",
+  "cta body": "ctaContent",
+  "cta link": "ctaLink",
+  "cta link label": "ctaLinkLabel",
+  "back cover punchline": "backCoverPunchline",
+  "back cover bullets": "backCoverBullets",
   "body font": "fontBody",
   "heading font": "fontHeading",
   "mono font": "fontMono",
@@ -233,6 +256,19 @@ function buildResolvedConfig(
     language: "en-US",
     format: { ...defaults.format },
     disclaimer: { required: disclaimerRequired, text: fields.disclaimer || null },
+    backMatter: {
+      ctaTitle: fields.ctaTitle || null,
+      ctaContent: fields.ctaContent || null,
+      ctaLink: fields.ctaLink || null,
+      ctaLinkLabel: fields.ctaLinkLabel || null,
+      backCoverPunchline: fields.backCoverPunchline || null,
+      // Blank-line separated in the form, so a bullet containing its own dash
+      // stays intact — splitting on "-" would break exactly that case.
+      backCoverBullets: (fields.backCoverBullets || "")
+        .split(/\n\n+/)
+        .map((b) => b.replace(/^[-*]\s*/, "").trim())
+        .filter(Boolean),
+    },
     theme: { name: theme.name },
     fonts: {
       body: fields.fontBody || theme.fonts.body,

@@ -229,17 +229,49 @@ export async function assembleBook(options: AssembleOptions): Promise<AssembleRe
   });
   sections.push(`chapters (${chapterHtmls.length})`);
 
-  // 7. CTA — only if the project supplies copy for it.
-  skipped.push({
-    section: "cta",
-    reason: "no CTA copy in brand-input.md or config/resolved.yaml — writing one would invent an offer the project has not made (R3)",
-  });
+  // 7. CTA — only when the project supplies its copy. Never generated (R3).
+  const bm = config.backMatter;
+  if (bm.ctaTitle?.trim() && bm.ctaContent?.trim()) {
+    const ctaTemplate = await loadTemplate(options.repoRoot, "backmatter/cta.html");
+    let ctaHtml = fill(ctaTemplate, {
+      CTA_TITLE: escapeHtml(bm.ctaTitle.trim()),
+      CTA_CONTENT: escapeHtml(bm.ctaContent.trim()),
+      CTA_LINK: escapeHtml(bm.ctaLink ?? ""),
+      CTA_LINK_LABEL: escapeHtml(bm.ctaLinkLabel ?? ""),
+    });
+    // "Omit .cta-button if there is no link" — a button pointing nowhere is
+    // worse than no button.
+    if (!bm.ctaLink?.trim()) {
+      ctaHtml = ctaHtml.replace(/<a class="cta-button"[\s\S]*?<\/a>\s*/, "");
+    }
+    parts.push(ctaHtml);
+    sections.push("cta");
+  } else {
+    skipped.push({
+      section: "cta",
+      reason: "no CTA title/body in brand-input.md — writing one would invent an offer the project has not made (R3)",
+    });
+  }
 
-  // 8. Back cover — same reasoning.
-  skipped.push({
-    section: "back-cover",
-    reason: "no punchline or bullets in brand-input.md or config/resolved.yaml — writing them would invent claims about the book (R3)",
-  });
+  // 8. Back cover — same rule. Last page in reading order.
+  if (bm.backCoverPunchline?.trim() && bm.backCoverBullets.length > 0) {
+    const backCoverTemplate = await loadTemplate(options.repoRoot, "backmatter/back-cover.html");
+    parts.push(
+      fill(backCoverTemplate, {
+        BACK_COVER_PUNCHLINE: escapeHtml(bm.backCoverPunchline.trim()),
+        BACK_COVER_BULLETS: bm.backCoverBullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("\n    "),
+        // The template has no branding placeholder of its own — it reuses the
+        // author/brand name already in config.
+        AUTHOR_NAME: escapeHtml(config.project.author),
+      }),
+    );
+    sections.push("back-cover");
+  } else {
+    skipped.push({
+      section: "back-cover",
+      reason: "no punchline or bullets in brand-input.md — writing them would invent claims about the book (R3)",
+    });
+  }
 
   const bodyHtml = parts.join("\n\n");
   const htmlDir = path.join(projectRoot, "html");

@@ -62,6 +62,34 @@ overwritten by the pipeline once it exists — edit it freely and re-run
      red rather than to one of your brand hues. Set it if your brand has a
      specific red; otherwise the default is fine. -->
 
+## Back matter — optional (but a finished book wants both)
+
+<!-- The CTA page and the back cover are composed ONLY when you write them
+     here. The pipeline will never generate a punchline or an offer: that
+     would be a claim you never made (R3). Leave these blank and both
+     sections are skipped, and studio:build reports the omission.
+
+     CTA link is optional too — omit it for a self-contained book with no
+     external destination, and the button is dropped rather than rendered
+     pointing nowhere. -->
+
+**CTA title:** 
+**CTA body:** 
+**CTA link:** 
+**CTA link label:** 
+
+**Back cover punchline:** 
+
+<!-- Back cover bullets: three of them, separated by a BLANK LINE each (not
+     consecutive "-" lines). Blank-line separation is what lets a bullet
+     contain its own dash without being split in half. A leading "- " is
+     optional and stripped. Never state a claim the book does not support (R3). -->
+
+**Back cover bullets:** 
+
+<!-- The back cover's branding line is not a field: it uses the Author /
+     brand name you already gave above. -->
+
 ## Fonts — optional
 
 <!-- Leave blank for the pipeline default (Literata body / Inter heading /
