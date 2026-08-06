@@ -176,13 +176,71 @@
    here before (skills/pdf-assembly called this out explicitly
    rather than letting it be assumed).
 
-   Two halves, both required:
-     1. these @page rules render the folio as lower-roman for
-        every page carrying `page: front-matter`;
-     2. `.body-start` below resets the page counter at the first
-        chapter, so the body restarts at 1 no matter how many
-        front-matter pages preceded it.
+   The body's arabic folio IS the `page` counter — the counter
+   simply does not advance over the cover and front matter (see
+   the counter-increment rules below), so it reaches 1 exactly on
+   the first body page and needs no restart. The front matter
+   carries its own counter instead.
+
+   This replaces an earlier `.body-start { counter-reset: page 1 }`,
+   which looked right and was not. Paged.js implements a content
+   `counter-reset: page N` in Counters.afterPageLayout by injecting
+   `[data-page-number="N"] { counter-increment: none; counter-reset:
+   page 1 }` — scoped to that ONE page element. The reset page
+   therefore printed 1, the document counter silently skipped its
+   increment there, and every later page fell back to that counter:
+   the gold build printed 1 then jumped straight to 7. A content
+   counter-reset cannot restart page numbering in Paged.js; only
+   controlling the per-page increment can.
    --------------------------------------------------------- */
+
+/* The cover and the front matter do not consume arabic page
+   numbers. `counter-increment: page 0` in a non-@page rule is
+   Paged.js's supported hook (PageCounterIncrement rewrites it to
+   `--pagedjs-page-counter-increment: 0` on the matching page), and
+   `pagedjs_<name>_page` is the class it puts on every page laid out
+   under `@page <name>` — the same mechanism src/qc relies on to
+   find where the body starts. */
+.pagedjs_book-cover_page,
+.pagedjs_front-matter_page {
+  counter-increment: page 0;
+}
+
+/* ...so the front matter numbers itself, from a counter of its own
+   that advances once per page over exactly those pages. It is
+   incremented on .pagedjs_pagebox (one per page, a descendant of
+   the page box that holds the margin boxes) rather than on
+   .pagedjs_page, so it does not collide with the `counter-increment:
+   page ...` Paged.js sets there. The cover is counted but prints
+   nothing (@page book-cover suppresses its margin boxes), which is
+   what makes the title page ii rather than i.
+
+   The step is held in a custom property instead of being written
+   out as `counter-increment: frontmatter-folio 1`. Paged.js's
+   Counters module parses every counter-increment in the author
+   stylesheet, consumes the identifiers it finds, and re-emits them
+   as `[data-ref="..."]` rules bound to *source content* elements;
+   a page box is not one, so the declaration was stripped and the
+   counter stayed at 0 (the front matter printed "0" on every page).
+   Behind a var() the counter name is not an identifier the parser
+   picks up, and the browser still resolves it normally. */
+/* One shared origin for the counter. Without a reset on a common ancestor
+   each page box would create its own implicit instance — scoped to itself and
+   its following siblings, which page boxes in different pages are not — and
+   every front-matter page printed "i". It is set on body rather than on
+   .pagedjs_pages because Paged.js already declares counter-reset there and a
+   second declaration would replace, not extend, it. */
+body {
+  counter-reset: var(--frontmatter-folio-origin, frontmatter-folio 0);
+}
+
+.pagedjs_pagebox {
+  counter-increment: var(--frontmatter-folio-step, frontmatter-folio 0);
+}
+.pagedjs_book-cover_page,
+.pagedjs_front-matter_page {
+  --frontmatter-folio-step: frontmatter-folio 1;
+}
 @page front-matter {
   @top-left { content: none; }
   @top-right { content: none; }
@@ -192,7 +250,7 @@
    front-matter page. */
 @page front-matter:left {
   @bottom-left {
-    content: counter(page, lower-roman);
+    content: counter(frontmatter-folio, lower-roman);
     font-family: var(--font-mono);
     font-size: var(--font-size-meta);
     color: var(--color-folio);
@@ -201,7 +259,7 @@
 }
 @page front-matter:right {
   @bottom-right {
-    content: counter(page, lower-roman);
+    content: counter(frontmatter-folio, lower-roman);
     font-family: var(--font-mono);
     font-size: var(--font-size-meta);
     color: var(--color-folio);
@@ -227,12 +285,11 @@
   page: front-matter;
 }
 
-/* Restarts the folio at arabic 1 on the first chapter. The assembler adds
-   this class to the first chapter only — every later chapter must keep
-   counting, not reset. */
-.body-start {
-  counter-reset: page 1;
-}
+/* .body-start is no longer a counter hook — the page counter now reaches 1 on
+   the first body page on its own (see the counter-increment rules above). The
+   class is still emitted by the assembler and kept here as a named anchor for
+   the start of the body; it deliberately carries no counter declaration,
+   because a content-level counter-reset is exactly what broke the folios. */
 
 /* Source string for the running header book title: a
    zero-footprint element placed once at the top of <body>,
@@ -263,8 +320,27 @@ body {
   line-height: var(--line-height-body);
   color: var(--color-text);
   background: var(--color-bg);
-  hyphens: auto;
-  -webkit-hyphens: auto;
+  /* Automatic hyphenation is off because it silently DELETES TEXT here, which
+     no amount of tighter justification is worth (R2: the source text is
+     reproduced identically).
+
+     When Chromium hyphenates the last word of a page, Paged.js's fragmenter
+     and the painted layout disagree about where that page ends. Paged.js
+     leaves the whole line in the page's DOM fragment and starts the next
+     fragment after it; the browser paints only up to the hyphen and pushes the
+     rest into the off-page overflow column, where it is clipped. Everything
+     between the two points vanishes from the PDF — no error, no overflow, and
+     the DOM still contains the words, so no gate that inspects the element
+     tree can see it.
+
+     Measured on this book with `hyphens: auto`: seven page boundaries ended in
+     a hyphenated word and every one of them lost text — 19 words in total. The
+     worst was the disclaimer, where a full line went missing and the sentence
+     ran "…have inherent limi-" straight into "lect actual trading conditions".
+     With `manual` the same build loses nothing. Soft hyphens (&shy;) still
+     work, so a specific bad break can still be fixed by hand. */
+  hyphens: manual;
+  -webkit-hyphens: manual;
   orphans: 3;
   widows: 3;
 }

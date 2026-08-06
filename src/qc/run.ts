@@ -13,6 +13,7 @@ import { extractPageText } from "./pdf-text.js";
 import { checkFontsEmbedded } from "./checks/fonts-embedded.js";
 import { checkTextCoverage } from "./checks/text-coverage.js";
 import { checkNoBrokenChars } from "./checks/no-broken-chars.js";
+import { checkNoHyphenPageBreak } from "./checks/no-hyphen-page-break.js";
 import { checkInkCoverage } from "./checks/ink-coverage.js";
 import { checkNoOverflow } from "./checks/no-overflow.js";
 import { checkMinFontSize } from "./checks/min-font-size.js";
@@ -20,6 +21,7 @@ import { checkContrast } from "./checks/contrast.js";
 import { checkAssetsExist } from "./checks/assets-exist.js";
 import { checkCoverRenders } from "./checks/cover-renders.js";
 import { checkImageDpi } from "./checks/image-dpi.js";
+import { checkFolioContinuity } from "./checks/folio-continuity.js";
 import { checkOutlineToc } from "./checks/outline-toc.js";
 import { checkMetadata } from "./checks/metadata.js";
 import { checkFileSize } from "./checks/file-size.js";
@@ -46,6 +48,7 @@ const CHECKS = [
   checkFontsEmbedded,
   checkTextCoverage,
   checkNoBrokenChars,
+  checkNoHyphenPageBreak,
   checkInkCoverage,
   checkNoOverflow,
   checkMinFontSize,
@@ -53,6 +56,7 @@ const CHECKS = [
   checkAssetsExist,
   checkCoverRenders,
   checkImageDpi,
+  checkFolioContinuity,
   checkOutlineToc,
   checkMetadata,
   checkFileSize,
