@@ -860,6 +860,29 @@ figure.figure figcaption {
   font-size: var(--font-size-meta);
 }
 
+/* A disclaimer long enough to span two pages must still read as one framed
+   block, not as two stacked boxes.
+
+   box-decoration-break has no say here: it governs the fragments of a single
+   box, and Paged.js does not fragment a box — it clones the element, so each
+   page holds a separate <div class="disclaimer-block"> that draws its own
+   complete border. (It already computes to `slice`, the initial value, on both
+   fragments; setting it changes nothing.) What distinguishes the fragments are
+   the attributes Paged.js writes on them, verified against the rendered
+   markup: the fragment that continues overleaf carries data-split-to, the one
+   that resumes carries data-split-from, both valued with the shared data-ref
+   uuid. Matching on their presence opens the edge at the break. */
+.disclaimer-block[data-split-to] {
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.disclaimer-block[data-split-from] {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 .toc-page-title,
 .bonus-teaser-title {
   font-family: var(--font-heading);
